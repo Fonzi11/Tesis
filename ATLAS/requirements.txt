@@ -1,0 +1,11 @@
+SimpleITK==2.5.3
+TotalSegmentator==2.0.5
+nibabel==5.2.1
+pyvista==0.43.0
+trimesh==4.9.0
+torch
+fast-simplification
+scipy
+bpy
+monai
+scikit-image

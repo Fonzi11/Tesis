@@ -1,0 +1,40 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== Datos médicos (DICOM / NIfTI) =====
+data/
+
+# ===== Resultados y artefactos generados =====
+salidas/
+dist/
+build/
+
+# ===== Modelos / pesos (archivos grandes) =====
+modelos_3d/
+modelos_preentrenados/
+ATLAS/modelos_preentrenados/
+_tools/
+
+# ===== Archivos 3D binarios (FBX/STL/OBJ) =====
+*.fbx
+*.stl
+*.obj
+*.ply
+*.glb
+*.gltf
+
+# ===== Archivos temporales / accidentales =====
+nul
+_print_tmp.py
+_print2.py
+_print3.py
+_shot_atlas.py
+
+# ===== IDE y sistema operativo =====
+.DS_Store
+Thumbs.db
