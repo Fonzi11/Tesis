@@ -269,7 +269,174 @@ def _find_blender():
 
 
 # =====================================================================
-# CLASE: Visor 3D de Modelos FBX
+# CLASE: Panel de Vistas 2D
+# =====================================================================
+class Slice2DPanel(ctk.CTkFrame):
+    """Panel para visualizar cortes 2D con tumor encerrado en círculo."""
+
+    def __init__(self, master, slice_dir, **kwargs):
+        super().__init__(master, **kwargs)
+        self.configure(fg_color=COLORS["bg_secondary"], corner_radius=12,
+                       border_width=1, border_color=COLORS["border"])
+        self.slice_dir = slice_dir
+        self._slices = {}
+        self._img_tk = {}
+        
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=18, pady=(16, 12))
+        ctk.CTkLabel(header, text="VISTAS 2D CON TUMOR",
+                     font=(FONT_TITLE, 16, "bold"), text_color=COLORS["text"]).pack(side="left")
+        
+        # Grid de las 3 vistas - DISTRIBUIDO EN VERTICAL para máximo espacio
+        grid_frame = ctk.CTkFrame(self, fg_color="transparent")
+        grid_frame.pack(fill="both", expand=True, padx=14, pady=14)
+        
+        self.labels = {}
+        self.canvas_widgets = {}
+        
+        for i, (name, label_txt) in enumerate([("axial", "AXIAL"), ("coronal", "CORONAL"), ("sagital", "SAGITAL")]):
+            # Cada vista ocupa una fila completa
+            row = i
+            
+            frame = ctk.CTkFrame(grid_frame, fg_color=COLORS["bg_card"], corner_radius=10, border_width=1, border_color=COLORS["border"])
+            frame.grid(row=row, column=0, padx=0, pady=8, sticky="nsew")
+            
+            # Contenedor interno con título + imagen
+            inner = ctk.CTkFrame(frame, fg_color="transparent")
+            inner.pack(fill="both", expand=True, padx=12, pady=12)
+            
+            title = ctk.CTkLabel(inner, text=label_txt, 
+                               font=(FONT_FAMILY, 12, "bold"), text_color=COLORS["accent"])
+            title.pack(pady=(0, 8))
+            
+            # Usar Canvas para mejor control de imágenes
+            canvas = ctk.CTkCanvas(inner, 
+                                  width=320, height=280,
+                                  bg=COLORS["bg_input"], 
+                                  highlightthickness=0,
+                                  bd=0)
+            canvas.pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            
+            # Label de texto para errores/placeholders
+            text_label = ctk.CTkLabel(inner, text="Cargando...", 
+                                     fg_color=COLORS["bg_input"], 
+                                     height=250,
+                                     corner_radius=8,
+                                     text_color=COLORS["text_secondary"])
+            text_label.pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            
+            self.canvas_widgets[name] = {"canvas": canvas, "label": text_label, "photo": None}
+            self.labels[name] = text_label
+        
+        grid_frame.grid_columnconfigure(0, weight=1)
+        grid_frame.grid_rowconfigure(0, weight=1)
+        grid_frame.grid_rowconfigure(1, weight=1)
+        grid_frame.grid_rowconfigure(2, weight=1)
+    
+    def load_slices(self):
+        """Carga las imágenes 2D desde archivos PNG."""
+        try:
+            from PIL import Image, ImageTk
+            import traceback
+            
+            for name in ["axial", "coronal", "sagital"]:
+                path = os.path.join(self.slice_dir, f"corte_{name}.png")
+                widget_info = self.canvas_widgets[name]
+                canvas = widget_info["canvas"]
+                text_label = widget_info["label"]
+                
+                print(f"[SLICE2D] Intentando cargar: {path}")
+                
+                if os.path.exists(path):
+                    try:
+                        # Abrir imagen
+                        img = Image.open(path)
+                        print(f"[SLICE2D] ✓ {name}: {img.size} (original)")
+                        
+                        # Redimensionar a 320x280 manteniendo aspecto
+                        img.thumbnail((320, 280), Image.Resampling.LANCZOS)
+                        print(f"[SLICE2D] ✓ {name}: {img.size} (redimensionada)")
+                        
+                        # Convertir a PhotoImage
+                        photo = ImageTk.PhotoImage(img)
+                        
+                        # IMPORTANTE: Guardar referencia para evitar garbage collection
+                        widget_info["photo"] = photo
+                        
+                        # Mostrar en canvas
+                        canvas.delete("all")
+                        canvas.create_image(160, 140, image=photo)
+                        
+                        # Ocultar label de texto
+                        text_label.pack_forget()
+                        
+                        print(f"[SLICE2D] ✓ {name} cargada exitosamente")
+                        
+                    except Exception as e:
+                        error_msg = str(e)[:50]
+                        text_label.configure(text=f"❌ Error\n{error_msg}")
+                        print(f"[SLICE2D] ✗ Error cargando {name}: {error_msg}")
+                        traceback.print_exc()
+                else:
+                    text_label.configure(text=f"⚠️ {name.upper()}\nNo encontrado")
+                    print(f"[SLICE2D] ⚠️ {path} NO EXISTE")
+                    
+        except Exception as e:
+            print(f"[SLICE2D] Error general: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def clear(self):
+        """Limpia las imágenes."""
+        for name in self.canvas_widgets:
+            widget_info = self.canvas_widgets[name]
+            widget_info["canvas"].delete("all")
+            widget_info["label"].configure(text="Sin imagen")
+            widget_info["label"].pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            widget_info["photo"] = None
+            self._img_tk.pop(name, None)
+
+
+# =====================================================================
+# CLASE: Visor Unificado 2D+3D
+# =====================================================================
+class UnifiedViewerPanel(ctk.CTkFrame):
+    """Panel que integra visor 3D (arriba) y vistas 2D (abajo) con mejor distribución."""
+    
+    def __init__(self, master, fbx_dir, stl_dir, slice_dir, status_callback=None, **kwargs):
+        super().__init__(master, **kwargs)
+        self.configure(fg_color=COLORS["bg"], corner_radius=0)
+        
+        # Contenedor VERTICAL: 3D arriba (60%), 2D abajo (40%)
+        
+        # Visor 3D (60% de altura)
+        top_frame = ctk.CTkFrame(self, fg_color=COLORS["bg"])
+        top_frame.pack(side="top", fill="both", expand=True, padx=0, pady=(0, 8))
+        
+        self.preview_3d = FBXPreviewPanel(top_frame, fbx_dir, stl_dir, 
+                                         status_callback=status_callback)
+        self.preview_3d.pack(fill="both", expand=True)
+        
+        # Vistas 2D (40% de altura) - aprovechan todo el ancho
+        bottom_frame = ctk.CTkFrame(self, fg_color=COLORS["bg"])
+        bottom_frame.pack(side="bottom", fill="both", expand=True, padx=0)
+        
+        self.slices_2d = Slice2DPanel(bottom_frame, slice_dir)
+        self.slices_2d.pack(fill="both", expand=True)
+    
+    def refresh_models(self):
+        """Actualiza el visor 3D."""
+        if hasattr(self, "preview_3d"):
+            self.preview_3d.refresh_models()
+    
+    def load_2d_slices(self):
+        """Carga las vistas 2D."""
+        if hasattr(self, "slices_2d"):
+            self.slices_2d.load_slices()
+
+
+# =====================================================================
+# CLASE: Visor 3D de Modelos FBX (Original, mantenido por compatibilidad)
 # =====================================================================
 class FBXPreviewPanel(ctk.CTkFrame):
     """Visor 3D integrado para previsualizar los modelos FBX generados.
@@ -290,6 +457,7 @@ class FBXPreviewPanel(ctk.CTkFrame):
         self._status_cb = status_callback
         self._models = {}
         self._current_key = None
+        self._current_poly_key = None
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=16, pady=(14, 6))
@@ -355,6 +523,11 @@ class FBXPreviewPanel(ctk.CTkFrame):
         self._dragging = False
         self._last_x = 0
         self._last_y = 0
+        # Caché de mallas simplificadas (clave = ruta STL) para no re-simplificar
+        # ni re-cargar en cada render / cada drag y zoom. El cuello de botella
+        # del render era volver a construir la polydata VTK con bucles Python
+        # puros para mallas de cientos de miles de triángulos, congelando la UI.
+        self._mesh_cache = {}
 
         self.refresh_models()
 
@@ -427,43 +600,110 @@ class FBXPreviewPanel(ctk.CTkFrame):
         import vtk
         self._ren = vtk.vtkRenderer()
         self._ren.SetBackground(0.047, 0.047, 0.055)  # equivalente a VIEW_BG (#0c0c0e)
+        
+        # ========== ILUMINACIÓN DE ULTRADETALLE ==========
+        # Luz principal (key light) - directa y fuerte
+        light1 = vtk.vtkLight()
+        light1.SetPosition(1.0, 0.5, 1.0)
+        light1.SetIntensity(1.0)
+        light1.SetColor(1.0, 1.0, 1.0)
+        self._ren.AddLight(light1)
+        
+        # Luz de relleno (fill light) - suave desde otro ángulo
+        light2 = vtk.vtkLight()
+        light2.SetPosition(-0.8, 0.3, 0.5)
+        light2.SetIntensity(0.5)
+        light2.SetColor(0.9, 0.9, 0.95)
+        self._ren.AddLight(light2)
+        
+        # Luz de borde (rim light) - para resaltar contornos
+        light3 = vtk.vtkLight()
+        light3.SetPosition(0.0, -1.0, 0.2)
+        light3.SetIntensity(0.4)
+        light3.SetColor(0.8, 0.85, 0.95)
+        self._ren.AddLight(light3)
+        
+        # Luz ambiental global suave
+        self._ren.SetAmbient(0.2, 0.2, 0.22)
+        
         self._ren_win = vtk.vtkRenderWindow()
         self._ren_win.AddRenderer(self._ren)
         self._ren_win.SetOffScreenRendering(1)
+        # Renderizado de máxima calidad
+        self._ren_win.SetSize(1280, 960)  # Alta resolución interna
         self._vtk_initialized = True
 
     def _mesh_to_polydata(self, vs, faces):
+        """Construye vtkPolyData de forma VECTORIZADA.
+
+        La versión anterior insertaba cada punto y cada triángulo con bucles
+        Python puros (pts.SetPoint / tris.InsertNextCell), lo que para mallas
+        de cientos de miles de triángulos congelaba la interfaz durante
+        segundos/minutos. Aquí se convierten los numpy arrays en un solo paso.
+        """
+        import numpy as np
         import vtk
+        from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
+
+        vs = np.ascontiguousarray(vs, dtype=np.float32)
+        faces = np.ascontiguousarray(faces, dtype=np.int64)
+
         pd = vtk.vtkPolyData()
+
+        # --- Puntos: crear vtkPoints en un solo paso desde los vértices ---
         pts = vtk.vtkPoints()
-        pts.SetNumberOfPoints(len(vs))
-        for i in range(len(vs)):
-            v = vs[i]
-            pts.SetPoint(i, float(v[0]), float(v[1]), float(v[2]))
+        pts.SetDataTypeToFloat()
+        pts.SetData(numpy_to_vtk(vs, deep=True))
         pd.SetPoints(pts)
-        tris = vtk.vtkCellArray()
-        for t in faces:
-            tri = vtk.vtkTriangle()
-            tri.GetPointIds().SetId(0, int(t[0]))
-            tri.GetPointIds().SetId(1, int(t[1]))
-            tri.GetPointIds().SetId(2, int(t[2]))
-            tris.InsertNextCell(tri)
-        pd.SetPolys(tris)
+
+        # --- Celdas (triángulos) ---
+        # API moderna de vtkCellArray (9.6+): SetData(cellSize, connectivity)
+        # con connectivity = array plano de índices (i0,i1,i2, i0,i1,i2, ...).
+        n_faces = faces.shape[0]
+        if n_faces > 0:
+            conn = np.ascontiguousarray(faces.reshape(-1), dtype=np.int64)
+            cells = vtk.vtkCellArray()
+            cells.SetData(3, numpy_to_vtkIdTypeArray(conn, deep=True))
+            pd.SetPolys(cells)
+
         return pd
 
+    # Número máximo de caras que renderiza el visor. Para previsualización en
+    # pantalla 30k triángulos son más que suficientes (la resolución de una
+    # ventana de preview no supera ~2M píxeles). Mantener esta malla ligera
+    # es lo que evita que el render (offscreen) y cada arrastre del ratón
+    # congelen la interfaz con las mallas de cráneo/cerebro (500k+ caras).
+    PREVIEW_MAX_FACES = 30000
+
     def _load_preview_mesh(self, stl_path):
+        """Carga (y simplifica) la malla SOLO UNA VEZ por modelo, cacheándola.
+
+        Devuelve la malla simplificada y en caché. Esto elimina la relectura
+        del STL y la re-simplificación que antes ocurrían en cada render,
+        arrastre de ratón y zoom (el principal origen del congelamiento).
+        """
         import trimesh
+
+        if stl_path in self._mesh_cache:
+            return self._mesh_cache[stl_path]
+
         mesh = trimesh.load(stl_path, force="mesh")
-        if len(mesh.faces) > 40000:
+        n_faces = len(mesh.faces)
+
+        if n_faces > self.PREVIEW_MAX_FACES:
             try:
                 import fast_simplification
-                target = 30000
+                reduction = 1.0 - (self.PREVIEW_MAX_FACES / n_faces)
+                if reduction < 0.05:
+                    reduction = 0.05  # mínimo razonable para no tocar mallas ya ligeras
                 verts, faces = fast_simplification.simplify(
-                    mesh.vertices, mesh.faces,
-                    target_reduction=1 - target / len(mesh.faces))
-                mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=True)
+                    mesh.vertices, mesh.faces, target_reduction=reduction)
+                mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
             except Exception:
                 pass
+
+        # Guardar en caché para no repetir el trabajo costoso.
+        self._mesh_cache[stl_path] = mesh
         return mesh
 
     def _render_vtk(self, meta):
@@ -475,29 +715,47 @@ class FBXPreviewPanel(ctk.CTkFrame):
             if not os.path.exists(stl):
                 self._show_message("No se encontró la malla correspondiente (STL).")
                 return
-            mesh = self._load_preview_mesh(stl)
-            vs = mesh.vertices.astype(float)
-            faces = mesh.faces
-            self._vs = vs
-            self._faces = faces
-            rgba = meta["color_rgba"]
 
-            self._pd = self._mesh_to_polydata(vs, faces)
-            self._mapper = vtk.vtkPolyDataMapper()
-            self._mapper.SetInputData(self._pd)
-            self._actor = vtk.vtkActor()
-            self._actor.SetMapper(self._mapper)
-            self._actor.GetProperty().SetColor(rgba[0], rgba[1], rgba[2])
-            self._actor.GetProperty().SetAmbient(0.35)
-            self._actor.GetProperty().SetDiffuse(0.65)
-            self._actor.GetProperty().SetSpecular(0.15)
-            self._actor.GetProperty().SetSpecularPower(20.0)
-            self._actor.GetProperty().SetInterpolationToPhong()
-            self._actor.GetProperty().EdgeVisibilityOff()
+            # Solo reconstruimos la polydata cuando cambia el modelo. Con la
+            # caché de mallas y la construcción vectorizada, cargar un modelo
+            # nuevo es rápido; y al arrastrar/zoom NO se vuelve a reconstruir
+            # (esa es la clave para que el visor responda sin congelarse).
+            build_needed = (self._current_poly_key != self._current_key
+                            or self._pd is None)
+            if build_needed:
+                mesh = self._load_preview_mesh(stl)
+                vs = mesh.vertices.astype(float)
+                faces = mesh.faces
+                self._vs = vs
+                self._faces = faces
 
-            self._ren.RemoveAllViewProps()
-            self._ren.AddActor(self._actor)
-            self._ren.ResetCamera()
+                self._pd = self._mesh_to_polydata(vs, faces)
+                self._mapper = vtk.vtkPolyDataMapper()
+                self._mapper.SetInputData(self._pd)
+                self._actor = vtk.vtkActor()
+                self._actor.SetMapper(self._mapper)
+                rgba = meta["color_rgba"]
+                self._actor.GetProperty().SetColor(rgba[0], rgba[1], rgba[2])
+                # ========== RENDERIZADO DE ULTRADETALLE ==========
+                # Propiedades PBR mejoradas para máxima fidelidad clínica
+                self._actor.GetProperty().SetAmbient(0.28)
+                self._actor.GetProperty().SetDiffuse(0.72)
+                self._actor.GetProperty().SetSpecular(0.35)  # Mayor especularidad
+                self._actor.GetProperty().SetSpecularPower(64.0)  # Brillo puntuado (ultradetalle)
+                self._actor.GetProperty().SetInterpolationToPhong()
+                self._actor.GetProperty().EdgeVisibilityOff()
+                # Metallic y roughness (si el modelo lo soporta)
+                try:
+                    self._actor.GetProperty().SetMetallic(0.0)
+                    self._actor.GetProperty().SetRoughness(0.75)
+                except:
+                    pass
+
+                self._ren.RemoveAllViewProps()
+                self._ren.AddActor(self._actor)
+                self._ren.ResetCamera()
+                self._current_poly_key = self._current_key
+
             self._render_to_label()
         except Exception as e:
             import traceback
@@ -512,15 +770,31 @@ class FBXPreviewPanel(ctk.CTkFrame):
         except Exception:
             return 640, 480
 
-    def _render_to_label(self):
-        """Renderiza el frame actual de VTK y lo muestra en un widget Tk Label."""
+    def _render_to_label(self, throttle=False):
+        """Renderiza el frame actual de VTK y lo muestra en un widget Tk Label.
+
+        - throttle=True limita la frecuencia de render durante el arrastre/zoom
+          para que la interfaz no se congele con cada movimiento de ratón.
+        """
+        import time as _time
         try:
+            if throttle:
+                now = _time.monotonic()
+                last = getattr(self, "_last_render_ts", 0.0)
+                # ~33 fps máx durante la interacción; el render final forzado
+                # ocurre en el release del ratón (o al siguiente evento >34ms).
+                if (now - last) < 0.03:
+                    return
+                self._last_render_ts = now
+
             from PIL import Image, ImageTk
             import numpy as np
             import vtk
             from vtk.util.numpy_support import vtk_to_numpy
 
             w, h = self._canvas_size()
+            if w <= 1 or h <= 1:
+                return
             self._ren_win.SetSize(int(w), int(h))
             self._ren_win.Render()
 
@@ -565,6 +839,13 @@ class FBXPreviewPanel(ctk.CTkFrame):
 
     def _on_release(self, event):
         self._dragging = False
+        # Forzar un render final sin throttle para dejar la vista nítida.
+        if self._ren is not None:
+            try:
+                self._ren_win.Render()
+                self._render_to_label()
+            except Exception:
+                pass
 
     def _on_drag(self, event):
         if not self._dragging or self._ren is None:
@@ -579,7 +860,7 @@ class FBXPreviewPanel(ctk.CTkFrame):
         cam.Azimuth(-dx * 0.5)
         cam.Elevation(dy * 0.5)
         cam.OrthogonalizeViewUp()
-        self._render_to_label()
+        self._render_to_label(throttle=True)
 
     def _on_wheel(self, event):
         if self._ren is None:
@@ -590,7 +871,7 @@ class FBXPreviewPanel(ctk.CTkFrame):
         else:
             cam.Dolly(0.88)
         cam.OrthogonalizeViewUp()
-        self._render_to_label()
+        self._render_to_label(throttle=True)
 
     def _clear_viewport_placeholders(self):
         for w in self.canvas_host.winfo_children():
@@ -751,6 +1032,7 @@ class AtlasApp(ctk.CTk):
         self.output_dir = None
         self.is_running = False
         self.log_queue = queue.Queue()
+        self.ui_queue = queue.Queue()
         self.current_step = ""
 
         # Importar módulos del pipeline
@@ -767,8 +1049,8 @@ class AtlasApp(ctk.CTk):
         self._build_main_area()
         self._build_status_bar()
 
-        # Iniciar procesamiento de cola de logs
-        self.after(100, self._process_log_queue)
+        # Iniciar procesamiento de colas (logs + UI) en el hilo principal
+        self.after(100, self._process_queues)
 
         # Log de inicio
         self._log(f"{APP_NAME} v{APP_VERSION} iniciado", "HEADER")
@@ -987,19 +1269,23 @@ class AtlasApp(ctk.CTk):
         self.card_modelos = StatusCard(stats, "Modelos 3D Generados")
         self.card_modelos.pack(fill="x", pady=(0, 10))
 
-        # Columna izquierda: visor 3D (superior) + consola de logs (inferior)
+        # Columna izquierda: visor 3D + 2D (superior) + consola de logs (inferior)
         left_col = ctk.CTkFrame(view_row, fg_color=COLORS["bg"], corner_radius=0)
         left_col.pack(side="left", fill="both", expand=True)
 
-        # Visor 3D de modelos FBX: ocupa la parte superior, se expande hacia abajo
+        # Visor unificado 3D + 2D: ocupa la parte superior, se expande hacia abajo
         viewer_host = ctk.CTkFrame(left_col, fg_color=COLORS["bg"], corner_radius=0)
         viewer_host.pack(side="top", fill="both", expand=True)
         fbx_dir = os.path.join(MODELOS_DIR, "fbx")
         stl_dir = os.path.join(MODELOS_DIR, "stl")
-        self.preview_panel = FBXPreviewPanel(
-            viewer_host, fbx_dir, stl_dir,
+        slice_dir = os.path.join(SALIDAS_DIR, "segmentaciones_ai", "vistas_2d")
+        self.unified_viewer = UnifiedViewerPanel(
+            viewer_host, fbx_dir, stl_dir, slice_dir,
             status_callback=self._log)
-        self.preview_panel.pack(fill="both", expand=True)
+        self.unified_viewer.pack(fill="both", expand=True)
+        
+        # Guardar referencias para acceso posterior
+        self.preview_panel = self.unified_viewer.preview_3d
 
         # Consola de logs: debajo del visor, altura fija en la parte inferior
         console_frame = ctk.CTkFrame(left_col, fg_color=COLORS["bg"], corner_radius=0)
@@ -1016,7 +1302,7 @@ class AtlasApp(ctk.CTk):
             border_color=COLORS["border"], border_width=1, font=(FONT_FAMILY, 10))
         self.btn_clear_console.pack(side="right")
 
-        self.console = LogConsole(console_frame, height=180)
+        self.console = LogConsole(console_frame, height=120)
         self.console.pack(fill="x", expand=False, pady=(6, 0))
 
         self._refresh_preview()
@@ -1047,14 +1333,54 @@ class AtlasApp(ctk.CTk):
         self.log_queue.put((message, level))
 
     def _process_log_queue(self):
-        """Procesa la cola de logs."""
+        """Drena la cola de logs (SIEMPRE desde el hilo principal)."""
         try:
             while True:
                 message, level = self.log_queue.get_nowait()
                 self.console.log(message, level)
         except queue.Empty:
             pass
-        self.after(100, self._process_log_queue)
+
+    def _enqueue_ui(self, command, *args):
+        """Encoda una operación de UI para el hilo principal.
+
+        Tkinter/customtkinter NO son thread-safe: toda mutación de widgets debe
+        ocurrir en el hilo principal. Los hilos de trabajo (pipeline) solo
+        encolan la operación; _process_ui_queue la aplica en el hilo principal.
+        Esto elimina los cierres/congelamientos del hilo de Tk que se producían
+        al llamar directamente a widgets (progress_bar, labels, botones, tarjetas)
+        desde el hilo del pipeline después de terminar la malla de vasos.
+        """
+        self.ui_queue.put((command, args))
+
+    def _process_ui_queue(self):
+        """Drena la cola de operaciones de UI (solo hilo principal)."""
+        try:
+            while True:
+                command, args = self.ui_queue.get_nowait()
+                if command == "progress":
+                    self.progress_bar.set(args[0])
+                elif command == "status":
+                    self.status_label.configure(text=args[0])
+                elif command == "running":
+                    self._apply_running_state(args[0])
+                elif command == "card":
+                    card_attr, value, color = args
+                    card = getattr(self, card_attr, None)
+                    if card is not None:
+                        card.set_value(value, color)
+                elif command == "messagebox_error":
+                    messagebox.showerror("Error", args[0])
+                elif command == "refresh_preview":
+                    self._refresh_preview()
+        except queue.Empty:
+            pass
+
+    def _process_queues(self):
+        """Procesa todas las colas hacia la UI desde el hilo principal."""
+        self._process_log_queue()
+        self._process_ui_queue()
+        self.after(100, self._process_queues)
 
     def _clear_console(self):
         """Limpia la consola."""
@@ -1106,14 +1432,15 @@ class AtlasApp(ctk.CTk):
                                text_color=COLORS["text"])
 
     def _refresh_preview(self):
-        """Actualiza el visor 3D con los modelos FBX disponibles."""
-        if hasattr(self, "preview_panel") and self.preview_panel is not None:
-            self.preview_panel.refresh_models()
+        """Actualiza el visor 3D y 2D con los modelos disponibles."""
+        if hasattr(self, "unified_viewer") and self.unified_viewer is not None:
+            self.unified_viewer.refresh_models()
+            self.unified_viewer.load_2d_slices()
 
     def _refresh_preview_async(self):
-        """Actualiza el visor 3D desde el hilo de trabajo (programado al UI)."""
+        """Actualiza el visor 3D desde el hilo de trabajo (encolado al hilo principal)."""
         try:
-            self.after(0, self._refresh_preview)
+            self._enqueue_ui("refresh_preview")
         except Exception:
             pass
 
@@ -1121,8 +1448,14 @@ class AtlasApp(ctk.CTk):
     # MÉTODOS DE EJECUCIÓN
     # =================================================================
     def _set_running(self, running):
-        """Activa/desactiva el estado de ejecución."""
+        """Activa/desactiva el estado de ejecución (thread-safe: encola)."""
+        # `is_running` es una asignación de atributo simple (segura en CPython);
+        # la actualización de widgets se aplica en el hilo principal.
         self.is_running = running
+        self._enqueue_ui("running", running)
+
+    def _apply_running_state(self, running):
+        """Aplica el estado de ejecución en la UI (solo hilo principal)."""
         state = "disabled" if running else "normal"
         self.btn_run_pipeline.configure(state=state)
         self.btn_run_brats.configure(state=state)
@@ -1138,12 +1471,16 @@ class AtlasApp(ctk.CTk):
             self.card_estado.set_value("Completado", COLORS["success"])
 
     def _update_status(self, message):
-        """Actualiza la barra de estado."""
-        self.status_label.configure(text=message)
+        """Actualiza la barra de estado (thread-safe: encola)."""
+        self._enqueue_ui("status", message)
 
     def _update_progress(self, value):
-        """Actualiza la barra de progreso."""
-        self.progress_bar.set(value)
+        """Actualiza la barra de progreso (thread-safe: encola)."""
+        self._enqueue_ui("progress", value)
+
+    def _set_card(self, card_attr, value, color=None):
+        """Actualiza una tarjeta de estado desde cualquier hilo (encola)."""
+        self._enqueue_ui("card", card_attr, value, color)
 
     def _mask_has_voxels(self, mask_path):
         """Devuelve True si existe una máscara con al menos un voxel positivo."""
@@ -1166,12 +1503,13 @@ class AtlasApp(ctk.CTk):
                 self._update_progress(1.0)
                 self._log("Proceso completado exitosamente", "SUCCESS")
                 self._update_status("Proceso completado")
+                print("[+] Proceso completado exitosamente", flush=True)
                 return result
             except Exception as e:
                 self._log(f"Error: {e}", "ERROR")
                 self._log(traceback.format_exc(), "ERROR")
                 self._update_status("Error en el proceso")
-                messagebox.showerror("Error", f"Ocurrió un error:\n\n{e}")
+                self._enqueue_ui("messagebox_error", f"Ocurrió un error:\n\n{e}")
             finally:
                 self._set_running(False)
 
@@ -1263,41 +1601,54 @@ class AtlasApp(ctk.CTk):
             # Cerebro
             brain_path = os.path.join(output_dir, "brain.nii.gz")
             if os.path.exists(brain_path):
+                _t0 = time.perf_counter()
                 self.pipeline_01.build_mesh(brain_path, os.path.join(stl_dir, "Cerebro.stl"))
-                self._log("Modelo 3D del cerebro generado", "SUCCESS")
+                self._log(f"Modelo 3D del cerebro generado ({time.perf_counter() - _t0:.1f}s)", "SUCCESS")
 
             # Cráneo
             skull_path = os.path.join(output_dir, "skull.nii.gz")
             if os.path.exists(skull_path):
+                _t0 = time.perf_counter()
                 self.pipeline_01.build_mesh(skull_path, os.path.join(stl_dir, "Craneo.stl"))
-                self._log("Modelo 3D del cráneo generado", "SUCCESS")
+                self._log(f"Modelo 3D del cráneo generado ({time.perf_counter() - _t0:.1f}s)", "SUCCESS")
 
             # Tumor
             tumor_path = os.path.join(output_dir, "tumor_brats.nii.gz")
             if os.path.exists(tumor_path):
+                _t0 = time.perf_counter()
                 self.pipeline_03.build_mesh_improved(tumor_path, os.path.join(stl_dir, "Tumor.stl"))
-                self._log("Modelo 3D del tumor generado", "SUCCESS")
+                self._log(f"Modelo 3D del tumor generado ({time.perf_counter() - _t0:.1f}s)", "SUCCESS")
 
             # Aneurisma
             aneu_path = os.path.join(output_dir, "aneurisma_v2.nii.gz")
             if os.path.exists(aneu_path):
+                _t0 = time.perf_counter()
                 self.pipeline_03.build_mesh_improved(aneu_path, os.path.join(stl_dir, "Aneurisma.stl"))
-                self._log("Modelo 3D del aneurisma generado", "SUCCESS")
+                self._log(f"Modelo 3D del aneurisma generado ({time.perf_counter() - _t0:.1f}s)", "SUCCESS")
 
             # Vasos
             vasos_path = os.path.join(output_dir, "vasos.nii.gz")
             if os.path.exists(vasos_path):
+                _t0 = time.perf_counter()
                 self.pipeline_01.build_mesh(vasos_path, os.path.join(stl_dir, "Venas_Arterias.stl"))
-                self._log("Modelo 3D de vasos generado", "SUCCESS")
+                self._log(f"Modelo 3D de vasos generado ({time.perf_counter() - _t0:.1f}s)", "SUCCESS")
 
+            print("[+] PIPELINE COMPLETADO: modelos STL generados correctamente", flush=True)
             self._update_progress(1.0)
             self._log("=" * 60, "HEADER")
             self._log("PIPELINE COMPLETADO", "HEADER")
             self._log("=" * 60, "HEADER")
 
-            # Actualizar tarjetas
-            self.card_resultados.set_value("Pipeline completado", COLORS["success"])
-            self.card_modelos.set_value("5 modelos generados", COLORS["success"])
+            # Actualizar tarjetas (encolado: se aplica en el hilo principal)
+            self._set_card("card_resultados", "Pipeline completado", COLORS["success"])
+            self._set_card("card_modelos", "5 modelos generados", COLORS["success"])
+
+            # Refrescar el visor 3D para mostrar los modelos recién generados
+            # (encolado al hilo principal; el render usa la caché + polydata
+            # vectorizada, venas ~0.2s).
+            self._refresh_preview_async()
+
+            print("[+] Visor 3D actualizado con los modelos nuevos", flush=True)
 
         self._run_in_thread(pipeline_task)
 
@@ -1322,9 +1673,14 @@ class AtlasApp(ctk.CTk):
             self._log("Ejecutando segmentación...", "PROGRESS")
             result = self.pipeline_03.integrate_brats_into_pipeline(self.input_path, output_dir)
 
+            self._update_progress(0.8)
+            self._log("Actualizando vistas 2D...", "PROGRESS")
+            # Refrescar el visualizador de vistas 2D
+            self._refresh_preview_async()
+            
             self._update_progress(1.0)
             self._log(f"Segmentación BRATS completada: {result}", "SUCCESS")
-            self.card_resultados.set_value("BRATS completado", COLORS["success"])
+            self._set_card("card_resultados", "BRATS completado", COLORS["success"])
 
         self._run_in_thread(brats_task)
 
@@ -1366,7 +1722,7 @@ class AtlasApp(ctk.CTk):
                 self._log(f"  Candidato #{i}: {cand}", "INFO")
 
             self._update_progress(1.0)
-            self.card_resultados.set_value(f"{len(reporte)} candidatos", COLORS["success"])
+            self._set_card("card_resultados", f"{len(reporte)} candidatos", COLORS["success"])
 
         self._run_in_thread(aneu_task)
 
@@ -1410,11 +1766,16 @@ class AtlasApp(ctk.CTk):
                     params["emission"] = tuple(e)
 
                 self._log(f"Exportando {stl_file}...", "PROGRESS")
-                self.pipeline_01.export_stl_to_single_fbx(stl_path, fbx_path, **params)
+                # FIDELIDAD CLÍNICA: se exporta la malla con su resolución NATIVA
+                # (sin decimar), para preservar el máximo realismo anatómico.
+                # NO se optimiza para Unity/HoloLens/Quest: la decimación sigue
+                # disponible opcionalmente vía el parámetro max_faces de la función.
+                self.pipeline_01.export_stl_to_single_fbx(
+                    stl_path, fbx_path, **params)
                 self._log(f"FBX generado: {fbx_name}", "SUCCESS")
 
             self._update_progress(1.0)
-            self.card_modelos.set_value(f"{total} FBX exportados", COLORS["success"])
+            self._set_card("card_modelos", f"{total} FBX exportados", COLORS["success"])
             # Actualizar el visor 3D con los modelos recién exportados.
             self._refresh_preview_async()
 

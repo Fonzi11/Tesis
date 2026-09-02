@@ -246,7 +246,7 @@ def build_mesh(mask_path, output_stl, smooth_iterations=10, gaussian_sigma_mm=0.
     el eje. Un sigma menor preserva mas detalle anatomico fino (giros/surcos
     cerebrales, forma de foramenes craneales); uno mayor prioriza suavidad.
     """
-    print(f"\n[3/3] Generando malla organica de alta resolucion: {os.path.basename(mask_path)}...")
+    print(f"\n[3/3] Generando malla organica de alta resolucion: {os.path.basename(mask_path)}...", flush=True)
     if not os.path.exists(mask_path):
         return None
 
@@ -259,7 +259,7 @@ def build_mesh(mask_path, output_stl, smooth_iterations=10, gaussian_sigma_mm=0.
     spacing_xyz = mask_img.GetSpacing()
     spacing_zyx = (spacing_xyz[2], spacing_xyz[1], spacing_xyz[0])
 
-    print(f"   -> Aplicando suavizado Gaussiano 3D calibrado a {gaussian_sigma_mm} mm fisicos por eje...")
+    print(f"   -> Aplicando suavizado Gaussiano 3D calibrado a {gaussian_sigma_mm} mm fisicos por eje...", flush=True)
     import scipy.ndimage
     # sigma por eje en voxeles = sigma deseado en mm / tamano de voxel en ese eje.
     # Asi el suavizado es fisicamente isotropico (igual en mm en los 3 ejes)
@@ -278,17 +278,17 @@ def build_mesh(mask_path, output_stl, smooth_iterations=10, gaussian_sigma_mm=0.
     verts_xyz = verts_zyx[:, ::-1]
     mesh = trimesh.Trimesh(vertices=verts_xyz, faces=faces, process=True)
 
-    print(f"   Poligonos extraidos: {len(mesh.faces):,}")
+    print(f"   Poligonos extraidos: {len(mesh.faces):,}", flush=True)
 
     if smooth_iterations > 0:
-        print("   -> Aplicando pulido final de malla (Taubin)...")
+        print("   -> Aplicando pulido final de malla (Taubin)...", flush=True)
         try:
             trimesh.smoothing.filter_taubin(mesh, iterations=smooth_iterations)
         except Exception:
             pass
 
     mesh.export(output_stl)
-    print(f"[+] Malla guardada: {output_stl}")
+    print(f"[+] Malla guardada: {output_stl}", flush=True)
     return output_stl
 
 
@@ -831,21 +831,53 @@ def generate_skull_mask(nifti_path, output_skull_path):
 
 def export_stl_to_single_fbx(stl_path, output_fbx, color_rgba=(1.0, 1.0, 1.0, 1.0),
                               roughness=0.6, metallic=0.0, emission=(0, 0, 0, 1),
-                              subsurface=0.0, subsurface_color=(1, 1, 1, 1)):
+                              subsurface=0.0, subsurface_color=(1, 1, 1, 1),
+                              subdiv_levels=0, max_faces=None):
     """
-    Exporta un STL a FBX con material PBR completo:
-    - color_rgba     : Color base (R, G, B, Alpha)
-    - roughness      : 0=espejo, 1=mate
-    - metallic       : 0=plastico, 1=metal
-    - emission       : Color de emision (para efectos de brillo)
-    - subsurface     : Translucencia subcutanea (para tejido organico real)
-    - subsurface_color: Color de la luz interna translucida
+    Exporta un STL a FBX con material PBR completo.
+
+    MODO CLINICO (maximo realismo anatomico): por defecto NO subdivide
+    (subdiv_levels=0, antes nivel 2 = 16x poligonos -> FBX de 90-230 MB) y
+    NO decima la geometria (max_faces=None) para preservar la forma nativa
+    de la malla. La decimacion/optimizacion para Unity/HoloLens/Quest solo
+    se activa si se pasa explicitamente max_faces.
+    Parametros:
+    - color_rgba       : Color base (R, G, B, Alpha)
+    - roughness        : 0=espejo, 1=mate
+    - metallic         : 0=plastico, 1=metal
+    - emission         : Color de emision (para efectos de brillo)
+    - subsurface       : Translucencia subcutanea (para tejido organico real)
+    - subsurface_color : Color de la luz interna translucida
+    - subdiv_levels    : Niveles de subdivision (0=off, por defecto para calidad clinica)
+    - max_faces        : (Opcional, MR) Si la malla supera esta cantidad, se decima.
+                         Por defecto None -> se exporta con TODA la fidelidad nativa.
     """
     if not os.path.exists(stl_path):
         return None
     try:
         import bpy
         import math
+
+        # ---- Decimacion previa si la malla es demasiado densa para MR ----
+        if max_faces and max_faces > 0:
+            import trimesh
+            try:
+                m = trimesh.load(stl_path, force="mesh")
+                if len(m.faces) > max_faces:
+                    import fast_simplification
+                    red = 1.0 - (max_faces / len(m.faces))
+                    print(f"   -> Decimando para realidad mixta: {len(m.faces):,} -> {max_faces:,} caras")
+                    vs, fc = fast_simplification.simplify(
+                        m.vertices, m.faces, target_reduction=red)
+                    simp = trimesh.Trimesh(vertices=vs, faces=fc, process=True)
+                    decim_path = stl_path.rsplit(".", 1)[0] + "_decimada_mr.stl"
+                    simp.export(decim_path)
+                    stl_path = decim_path
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"   [!] No se pudo decimar: {e}")
+
         print(f"\n[4/4] Exportando FBX con material PBR: {os.path.basename(output_fbx)}...")
         bpy.ops.wm.read_factory_settings(use_empty=True)
         if bpy.data.objects.get("Cube"):
@@ -930,20 +962,20 @@ def export_stl_to_single_fbx(stl_path, output_fbx, color_rgba=(1.0, 1.0, 1.0, 1.
         else:
             obj.data.materials.append(mat)
 
-        # === SUBDIVISION SURFACE: DETALLE MAS ALLA DE LA RESOLUCION DEL ESCANER ===
-        # Nivel 2 = cuadruplica los poligonos dos veces (x4 el detalle de superficie)
-        # Esto suaviza las curvas organicas SIN borrar la forma anatomica
-        print("   -> Aplicando Subdivision Surface (nivel 2) para hiper-detalle...")
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        subsurf_mod = obj.modifiers.new(name="Subdiv", type='SUBSURF')
-        subsurf_mod.levels = 2              # nivel viewport
-        subsurf_mod.render_levels = 2       # nivel render/export
-        subsurf_mod.subdivision_type = 'CATMULL_CLARK'
-
-        # Aplicar el modificador permanentemente antes de exportar
-        bpy.ops.object.modifier_apply(modifier="Subdiv")
-        print(f"   -> Poligonos tras subdivision: {len(obj.data.polygons):,}")
+        # === SUBDIVISION OPCIONAL (por defecto DESACTIVADA para realidad mixta) ===
+        # Antes se aplicaba nivel 2 (16x poligonos) y se exportaban FBX de
+        # ~100-230 MB, imposibles de cargar en tiempo real en dispositivos MR.
+        # Ahora solo se subdivide si se pide explicitamente via subdiv_levels.
+        if subdiv_levels and subdiv_levels > 0:
+            print(f"   -> Aplicando Subdivision Surface (nivel {subdiv_levels})...")
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+            subsurf_mod = obj.modifiers.new(name="Subdiv", type='SUBSURF')
+            subsurf_mod.levels = subdiv_levels
+            subsurf_mod.render_levels = subdiv_levels
+            subsurf_mod.subdivision_type = 'CATMULL_CLARK'
+            bpy.ops.object.modifier_apply(modifier="Subdiv")
+        print(f"   -> Poligonos a exportar: {len(obj.data.polygons):,}")
 
         # Aplicar transformaciones y exportar
         bpy.ops.object.select_all(action='SELECT')
@@ -1019,7 +1051,7 @@ if __name__ == "__main__":
                     roughness=0.75,
                     metallic=0.0,
                     subsurface=0.35,
-                    subsurface_color=(0.9, 0.45, 0.35, 1.0)
+                    subsurface_color=(0.9, 0.45, 0.35, 1.0),
                 )
 
         if os.path.exists(RUTA_MASCARA_TUMOR):
@@ -1032,7 +1064,7 @@ if __name__ == "__main__":
                     metallic=0.0,
                     emission=(0.3, 0.0, 0.6, 1.0),
                     subsurface=0.1,
-                    subsurface_color=(0.6, 0.0, 0.8, 1.0)
+                    subsurface_color=(0.6, 0.0, 0.8, 1.0),
                 )
 
         if os.path.exists(RUTA_MASCARA_VASOS):
@@ -1044,7 +1076,7 @@ if __name__ == "__main__":
                     roughness=0.2,
                     metallic=0.05,
                     subsurface=0.2,
-                    subsurface_color=(1.0, 0.2, 0.2, 1.0)
+                    subsurface_color=(1.0, 0.2, 0.2, 1.0),
                 )
 
         if os.path.exists(RUTA_MASCARA_CRANEO):
@@ -1057,7 +1089,7 @@ if __name__ == "__main__":
                     roughness=0.85,
                     metallic=0.0,
                     subsurface=0.08,
-                    subsurface_color=(1.0, 0.95, 0.80, 1.0)
+                    subsurface_color=(1.0, 0.95, 0.80, 1.0),
                 )
 
         # Candidatos a aneurisma: solo se exportan si generate_aneurysm_candidates
@@ -1072,5 +1104,5 @@ if __name__ == "__main__":
                     metallic=0.0,
                     emission=(1.0, 0.35, 0.0, 1.0),
                     subsurface=0.05,
-                    subsurface_color=(1.0, 0.6, 0.2, 1.0)
+                    subsurface_color=(1.0, 0.6, 0.2, 1.0),
                 )

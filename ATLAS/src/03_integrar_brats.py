@@ -105,6 +105,23 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
                 shutil.copy2(src, dst)
                 results["tumor_brats"] = dst
                 print(f"[INTEGRACIÓN] Máscara de tumor BRATS copiada a: {dst}")
+                
+                # Generar vistas 2D automáticamente
+                try:
+                    print("[INTEGRACIÓN] Generando vistas 2D con tumor encerrado...")
+                    _slices_module = importlib.import_module("04_slices_2d")
+                    generar_vistas_2d = _slices_module.generar_vistas_2d
+                    
+                    slice_dir = os.path.join(output_dir, "vistas_2d")
+                    os.makedirs(slice_dir, exist_ok=True)
+                    
+                    vistas = generar_vistas_2d(nifti_path, dst, slice_dir, escala=3)
+                    results["vistas_2d"] = vistas
+                    print(f"[INTEGRACIÓN] Vistas 2D generadas en: {slice_dir}")
+                    for vista, ruta in vistas.items():
+                        print(f"  - {vista}: {ruta}")
+                except Exception as e:
+                    print(f"[INTEGRACIÓN] Advertencia: no se pudieron generar vistas 2D: {e}")
         else:
             print("[INTEGRACIÓN] BRATS no produjo resultados. Usando método heurístico.")
             results["metodo"] = "heurístico"

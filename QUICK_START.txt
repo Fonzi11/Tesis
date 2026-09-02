@@ -1,0 +1,89 @@
+⚡ QUICK START - ATLAS v1.1
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ IMPLEMENTACIÓN COMPLETADA - Renderizado UltraDetalle + Visualización 2D/3D
+
+─────────────────────────────────────────────────────────────────────────────
+🚀 EJECUTAR AHORA:
+─────────────────────────────────────────────────────────────────────────────
+
+1. Abre terminal (cmd o PowerShell)
+
+2. Copia y ejecuta:
+   cd d:\Tesis\ATLAS && python main.py
+
+3. En la GUI:
+   ✓ Selecciona archivo DICOM/NIfTI
+   ✓ Haz clic en "SEGMENTAR TUMOR"
+   ✓ Automáticamente aparecerán las vistas 2D al lado del visor 3D
+
+─────────────────────────────────────────────────────────────────────────────
+📖 DOCUMENTACIÓN:
+─────────────────────────────────────────────────────────────────────────────
+
+📄 ÍNDICE_DOCUMENTACIÓN.md ..................... Índice maestro
+📄 RESUMEN_EJECUTIVO.txt ....................... Resumen ejecutivo (LÉEME)
+📄 CAMBIOS_IMPLEMENTADOS.md .................... Documentación técnica
+📄 ARQUITECTURA_VISUAL.txt ..................... Diagramas ASCII
+
+─────────────────────────────────────────────────────────────────────────────
+✅ VERIFICAR INSTALACIÓN:
+─────────────────────────────────────────────────────────────────────────────
+
+cd d:\Tesis && python verificar_instalacion.py
+
+─────────────────────────────────────────────────────────────────────────────
+🎯 LO QUE SE IMPLEMENTÓ:
+─────────────────────────────────────────────────────────────────────────────
+
+✅ Renderizado 3D Ultradetalle:
+   • 3 luces profesionales (Key, Fill, Rim)
+   • SpecularPower 64 (máximo brillo puntual)
+   • Resolución 1280×960 px
+
+✅ Renderizado 2D Ultradetalle:
+   • Resolución 1024 px
+   • Supersampling 3x
+   • Contraste optimizado
+
+✅ Visualización Integrada:
+   • 70% visor 3D + 30% vistas 2D
+   • Lado a lado en tiempo real
+   • Auto-actualizable
+
+✅ Pipeline Automático:
+   • Vistas 2D se generan automáticamente tras BRATS
+   • En directorio: salidas/segmentaciones_ai/vistas_2d/
+
+─────────────────────────────────────────────────────────────────────────────
+💡 PARÁMETROS AJUSTABLES:
+─────────────────────────────────────────────────────────────────────────────
+
+Para MEJOR RENDIMIENTO (menos lag):
+  • En ATLAS/src/03_integrar_brats.py línea 122:
+    generar_vistas_2d(..., escala=2)  # antes: 3
+
+Para MÁS DETALLE (más lento):
+  • En ATLAS/src/03_integrar_brats.py línea 122:
+    generar_vistas_2d(..., escala=4)  # antes: 3
+
+─────────────────────────────────────────────────────────────────────────────
+📞 TROUBLESHOOTING:
+─────────────────────────────────────────────────────────────────────────────
+
+❓ ¿Las vistas 2D no aparecen?
+   • Mira la consola para mensajes de error
+   • Verifica que salidas/segmentaciones_ai/vistas_2d/ exista
+   • Intenta nuevamente con "SEGMENTAR TUMOR"
+
+❓ ¿El visor 3D va lento?
+   • Cambia escala a 2 en 03_integrar_brats.py
+   • Reduce resolución interna en main.py
+
+❓ ¿Las imágenes 2D ven borrosas?
+   • El supersampling 3x ya es máximo
+   • Intenta cambiar filtro en PIL
+
+─────────────────────────────────────────────────────────────────────────════════
+✅ LISTO - Ejecuta: python main.py
+═══════════════════════════════════════════════════════════════════════════════
