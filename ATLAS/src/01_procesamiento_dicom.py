@@ -222,6 +222,12 @@ def run_ai_segmentation(input_nifti, output_dir="segmentaciones_ai", fast_mode=F
     env = os.environ.copy()
     # Compatibilidad con checkpoints de nnUNet/TotalSegmentator en versiones recientes de PyTorch.
     env.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+    # TotalSegmentator 2.x usa "from pkg_resources import require" (pkg_resources está
+    # deprecado en setuptools modernos). La importación funciona mientras pkg_resources
+    # exista, pero emite un DeprecationWarning que llena la consola con el código fuente
+    # (la línea "from pkg_resources import require"). Lo suprimimos aquí para que la
+    # consola quede limpia; la funcionalidad no se ve afectada.
+    env.setdefault("PYTHONWARNINGS", "ignore")
     
     try:
         subprocess.run(comando, check=True, env=env)
@@ -295,7 +301,8 @@ def build_mesh(mask_path, output_stl, smooth_iterations=10, gaussian_sigma_mm=0.
 def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
                          min_volume_mm3=150.0, structuring_radius_mm=1.5,
                          min_score=0.35, seed_percentile=95.0, growth_percentile=80.0,
-                         max_growth_radius_mm=20.0, exclusion_mask_paths=None):
+                         max_growth_radius_mm=12.0, min_esfericidad=0.5,
+                         exclusion_mask_paths=None):
     """
     Deteccion de tumor por Morfologia Matematica -- v3 (nucleo + histeresis de extension).
 
@@ -324,6 +331,18 @@ def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
     (forma/tamano/intensidad), no en la extension ya crecida -- porque la
     extension puede ser irregular (edema) y no es un buen indicador de
     "que tan tumoral" es la masa; solo indica cuanto ocupa.
+
+    FILTROS DE CORRECCION (evitan tumores del tamano del cerebro):
+      - Se descartan nucleos poco esfericos (min_esfericidad): un nucleo
+        difuso/alargado (textura brillante dispersa) no es una masa tumoral.
+      - La extension esta acotada por DISTANCIA EUCLIDEA FISICA real
+        (distance_transform_edt) a max_growth_radius_mm del nucleo; antes la
+        cota solo limitaba el numero de pasos de dilacion y la region podia
+        "escapar" por caminos de tejido brillante conectado hasta abarcar el
+        cerebro entero.
+      - Al final se conserva SOLO la mayor componente conectada: en volumenes
+        con brillo difuso, varios nucleos dispersos por todo el cerebro que
+        pasan el filtro se fusionaban en una masa que abarca el cerebro entero.
     """
     print("\n[+] Detectando tumor (nucleo solido + histeresis de extension real)...")
     if not os.path.exists(brain_mask_path):
@@ -340,10 +359,13 @@ def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
         return None
 
     import scipy.ndimage as ndi
+    from scipy.ndimage import distance_transform_edt
 
     spacing_xyz = img.GetSpacing()
     voxel_volume_mm3 = spacing_xyz[0] * spacing_xyz[1] * spacing_xyz[2]
     mean_voxel_size_mm = voxel_volume_mm3 ** (1.0 / 3.0)
+    # Orden de ejes numpy = (z, y, x) -> para distance_transform_edt/sampling.
+    spacing_zyx = (spacing_xyz[2], spacing_xyz[1], spacing_xyz[0])
 
     print("   -> Paso 1: Aislar el nucleo (umbral estricto)...")
     seed_threshold = float(np.percentile(brain_voxels, seed_percentile))
@@ -414,19 +436,41 @@ def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
             })
 
     candidatos.sort(key=lambda c: c["score"], reverse=True)
-    aceptados = [c for c in candidatos if c["score"] >= min_score]
+    # Filtro de compacidad: un nucleo poco esferico (difuso/alargado) no es
+    # una masa tumoral solida; descartarlo evita partir de una semilla
+    # gigante y difusa que luego crece hasta abarcar el cerebro entero.
+    aceptados = [c for c in candidatos
+                 if c["score"] >= min_score and c["esfericidad"] >= min_esfericidad]
+    if len(aceptados) != len(candidatos):
+        print(f"   -> {len(candidatos) - len(aceptados)} nucleo(s) descartado(s) "
+              f"por baja esfericidad (< {min_esfericidad:.2f}).")
 
     if aceptados:
         print(f"   -> {len(aceptados)} nucleo(s) aceptado(s) de {len(candidatos)} evaluado(s); "
               f"expandiendo cada uno hasta {max_growth_radius_mm} mm dentro del halo de "
               f"intensidad permisiva (dilatacion condicionada, sin fuga por ruido)...")
         for i, c in enumerate(aceptados, start=1):
+            seed = c["seed_full"]
             # Dilatacion condicionada (region growing acotado): crece el
             # nucleo hacia afuera SOLO dentro de growth_mask, limitada a
             # growth_iterations pasos -- captura el halo/edema real conectado
             # sin invadir tejido sano arbitrariamente lejano.
-            region = ndi.binary_dilation(c["seed_full"], structure=struct,
+            region = ndi.binary_dilation(seed, structure=struct,
                                           iterations=growth_iterations, mask=growth_mask)
+
+            # --- FIX (tumor demasiado grande) ---
+            # La llamada a binary_dilation con `mask` solo limita el NUMERO de
+            # pasos, no la DISTANCIA espacial real. Si growth_mask es una red de
+            # tejido brillante conectado (tipico en volumenes sinteticos o con
+            # textura difusa), la region "escapa" por caminos brillantes lejanos
+            # al nucleo y produce un tumor del tamano del cerebro (bbox ~= cerebro).
+            # Aqui se recorta la region a los voxeles cuya DISTANCIA EUCLIDEA
+            # fisica al nucleo <= max_growth_radius_mm -- la cota de distancia que
+            # el docstring ya afirmaba pero que nunca se aplicaba realmente.
+            if growth_iterations > 1:
+                d_from_seed = distance_transform_edt(~seed, sampling=spacing_zyx)
+                region &= d_from_seed <= max_growth_radius_mm
+
             tumor_arr[region] = 1
 
             vol_total_mm3 = float(region.sum()) * voxel_volume_mm3
@@ -439,6 +483,27 @@ def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
                   f"extension_total={vol_total_mm3:.1f} mm3 ({vol_pct:.2f}% del cerebro)  "
                   f"esfericidad_nucleo={c['esfericidad']:.2f}  score={c['score']:.2f}  "
                   f"centroide(mm)={tuple(round(v, 1) for v in centroid_phys)}")
+
+        # --- FIX (tumor unico y localizado) ---
+        # En volumenes con textura brillante difusa, varios nucleos dispersos
+        # por TODO el cerebro pasan los filtros y, fusionados, producen una
+        # masa cuyo bbox abarca el cerebro entero ("tumor" gigante irreal).
+        # Conservar solo la MAYOR componente conectada garantiza un tumor
+        # unico, compacto y con extension fisica plausible.
+        if tumor_arr.any():
+            labels_final, n_final = ndi.label(tumor_arr > 0,
+                                              structure=np.ones((3, 3, 3)))
+            if n_final > 1:
+                sizes_final = ndi.sum(tumor_arr > 0, labels_final,
+                                      range(1, n_final + 1))
+                biggest_id = int(np.argmax(sizes_final)) + 1
+                tumor_arr[:] = 0
+                tumor_arr[labels_final == biggest_id] = 1
+                vol_keep = float(tumor_arr.sum()) * voxel_volume_mm3
+                print(f"   -> Conservada SOLO la mayor componente: "
+                      f"{vol_keep / 1000.0:.2f} cm3 " 
+                      f"({100.0 * vol_keep / (total_vox * voxel_volume_mm3):.2f}% "
+                      f"del cerebro).")
     else:
         print("   -> No se encontro ningun nucleo tumoral con score suficiente "
               "(podria estar sano, o min_score es muy exigente).")

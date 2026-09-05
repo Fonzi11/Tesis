@@ -60,7 +60,7 @@ COLORS = {
 # Rutas base
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
-MODELOS_DIR = os.path.join(os.path.dirname(BASE_DIR), "modelos_3d")
+MODELOS_DIR = os.path.join(os.path.dirname(BASE_DIR), "archivo", "modelos_3d")
 SALIDAS_DIR = os.path.join(os.path.dirname(BASE_DIR), "salidas")
 MODELOS_PT_DIR = os.path.join(os.path.dirname(BASE_DIR), "modelos_preentrenados")
 
@@ -294,36 +294,43 @@ class Slice2DPanel(ctk.CTkFrame):
         self.labels = {}
         self.canvas_widgets = {}
         
+        # DISEÑO: cada corte apilado verticalmente. Cada canvas se expande con la
+        # ventana y las imágenes se escalan (LANCZOS) al tamaño real disponible
+        # para conseguir el MÁXIMO renderizado 2D posible.
+        self._orig_images = {}  # copia en alta resolución de cada corte
+        
         for i, (name, label_txt) in enumerate([("axial", "AXIAL"), ("coronal", "CORONAL"), ("sagital", "SAGITAL")]):
-            # Cada vista ocupa una fila completa
             row = i
             
-            frame = ctk.CTkFrame(grid_frame, fg_color=COLORS["bg_card"], corner_radius=10, border_width=1, border_color=COLORS["border"])
+            frame = ctk.CTkFrame(grid_frame, fg_color=COLORS["bg_card"], corner_radius=10,
+                                 border_width=1, border_color=COLORS["border"])
             frame.grid(row=row, column=0, padx=0, pady=8, sticky="nsew")
+            frame.grid_rowconfigure(1, weight=1)
+            frame.grid_columnconfigure(0, weight=1)
             
             # Contenedor interno con título + imagen
             inner = ctk.CTkFrame(frame, fg_color="transparent")
-            inner.pack(fill="both", expand=True, padx=12, pady=12)
+            inner.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+            inner.grid_rowconfigure(1, weight=1)
+            inner.grid_columnconfigure(0, weight=1)
             
-            title = ctk.CTkLabel(inner, text=label_txt, 
-                               font=(FONT_FAMILY, 12, "bold"), text_color=COLORS["accent"])
-            title.pack(pady=(0, 8))
+            title = ctk.CTkLabel(inner, text=label_txt,
+                                 font=(FONT_FAMILY, 13, "bold"), text_color=COLORS["accent"])
+            title.grid(row=0, column=0, sticky="nw", pady=(0, 8))
             
-            # Usar Canvas para mejor control de imágenes
-            canvas = ctk.CTkCanvas(inner, 
-                                  width=320, height=280,
-                                  bg=COLORS["bg_input"], 
+            # Usar Canvas que se expande (sin tamaño fijo) para máximo tamaño
+            canvas = ctk.CTkCanvas(inner,
+                                  bg=COLORS["bg_input"],
                                   highlightthickness=0,
                                   bd=0)
-            canvas.pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            canvas.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
             
             # Label de texto para errores/placeholders
-            text_label = ctk.CTkLabel(inner, text="Cargando...", 
-                                     fg_color=COLORS["bg_input"], 
-                                     height=250,
+            text_label = ctk.CTkLabel(inner, text="Cargando...",
+                                     fg_color=COLORS["bg_input"],
                                      corner_radius=8,
                                      text_color=COLORS["text_secondary"])
-            text_label.pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            text_label.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
             
             self.canvas_widgets[name] = {"canvas": canvas, "label": text_label, "photo": None}
             self.labels[name] = text_label
@@ -332,46 +339,83 @@ class Slice2DPanel(ctk.CTkFrame):
         grid_frame.grid_rowconfigure(0, weight=1)
         grid_frame.grid_rowconfigure(1, weight=1)
         grid_frame.grid_rowconfigure(2, weight=1)
+        
+        # Redibujo los cortes al redimensionar la ventana para máximo detalle.
+        self.bind("<Configure>", self._on_panel_resize)
+        self._resize_job = None
     
-    def load_slices(self):
-        """Carga las imágenes 2D desde archivos PNG."""
+    def _on_panel_resize(self, event=None):
+        """Redibuja los cortes con retardo corto al redimensionar la ventana."""
+        if getattr(self, "_resize_job", None) is not None:
+            try:
+                self.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.after(80, self._rerender_all)
+
+    def _rerender_all(self):
+        """Vuelve a dibujar todas las imágenes al tamaño actual del canvas."""
+        for name in ["axial", "coronal", "sagital"]:
+            if self.canvas_widgets.get(name, {}).get("photo"):
+                self._draw_on_canvas(name)
+
+    def _canvas_size(self, name):
+        try:
+            canvas = self.canvas_widgets[name]["canvas"]
+            w = canvas.winfo_width()
+            h = canvas.winfo_height()
+            return max(int(w), 60), max(int(h), 60)
+        except Exception:
+            return 520, 460
+
+    def _draw_on_canvas(self, name):
+        """Escala (LANCZOS) la imagen original al tamaño del canvas y la dibuja."""
         try:
             from PIL import Image, ImageTk
+            orig = self._orig_images.get(name)
+            if orig is None:
+                return
+            widget_info = self.canvas_widgets[name]
+            canvas = widget_info["canvas"]
+            text_label = widget_info["label"]
+
+            cw, ch = self._canvas_size(name)
+            copy = orig.copy()
+            copy.thumbnail((cw, ch), Image.Resampling.LANCZOS)
+
+            photo = ImageTk.PhotoImage(copy)
+            widget_info["photo"] = photo  # guardar referencia (evita GC)
+
+            canvas.delete("all")
+            canvas.create_image(cw // 2, ch // 2, image=photo)
+            text_label.grid_remove()
+        except Exception as e:
+            print(f"[SLICE2D] Error dibujando {name}: {e}")
+
+    def load_slices(self):
+        """Carga las imágenes 2D desde archivos PNG (ALTA RESOLUCIÓN)."""
+        try:
+            from PIL import Image
             import traceback
-            
+
             for name in ["axial", "coronal", "sagital"]:
                 path = os.path.join(self.slice_dir, f"corte_{name}.png")
                 widget_info = self.canvas_widgets[name]
-                canvas = widget_info["canvas"]
                 text_label = widget_info["label"]
-                
+
                 print(f"[SLICE2D] Intentando cargar: {path}")
-                
+
                 if os.path.exists(path):
                     try:
-                        # Abrir imagen
+                        # Abrir imagen a máxima resolución
                         img = Image.open(path)
-                        print(f"[SLICE2D] ✓ {name}: {img.size} (original)")
-                        
-                        # Redimensionar a 320x280 manteniendo aspecto
-                        img.thumbnail((320, 280), Image.Resampling.LANCZOS)
-                        print(f"[SLICE2D] ✓ {name}: {img.size} (redimensionada)")
-                        
-                        # Convertir a PhotoImage
-                        photo = ImageTk.PhotoImage(img)
-                        
-                        # IMPORTANTE: Guardar referencia para evitar garbage collection
-                        widget_info["photo"] = photo
-                        
-                        # Mostrar en canvas
-                        canvas.delete("all")
-                        canvas.create_image(160, 140, image=photo)
-                        
-                        # Ocultar label de texto
-                        text_label.pack_forget()
-                        
+                        print(f"[SLICE2D] ✓ {name}: {img.size} (alta resolución)")
+                        # Guardar la versión original completa para escalar al
+                        # tamaño del canvas en cada frame.
+                        self._orig_images[name] = img.convert("RGB").copy()
+                        self._draw_on_canvas(name)
                         print(f"[SLICE2D] ✓ {name} cargada exitosamente")
-                        
+
                     except Exception as e:
                         error_msg = str(e)[:50]
                         text_label.configure(text=f"❌ Error\n{error_msg}")
@@ -380,7 +424,7 @@ class Slice2DPanel(ctk.CTkFrame):
                 else:
                     text_label.configure(text=f"⚠️ {name.upper()}\nNo encontrado")
                     print(f"[SLICE2D] ⚠️ {path} NO EXISTE")
-                    
+
         except Exception as e:
             print(f"[SLICE2D] Error general: {e}")
             import traceback
@@ -392,46 +436,184 @@ class Slice2DPanel(ctk.CTkFrame):
             widget_info = self.canvas_widgets[name]
             widget_info["canvas"].delete("all")
             widget_info["label"].configure(text="Sin imagen")
-            widget_info["label"].pack(pady=(0, 0), padx=0, fill="both", expand=True)
+            widget_info["label"].grid()
             widget_info["photo"] = None
             self._img_tk.pop(name, None)
+            self._orig_images.pop(name, None)
 
 
 # =====================================================================
-# CLASE: Visor Unificado 2D+3D
+# CLASE: Ventana 3D separada
+# =====================================================================
+class Viewer3DWindow(ctk.CTkToplevel):
+    """Ventana independiente que aloja el visor 3D a pantalla casi completa."""
+
+    def __init__(self, master, fbx_dir, stl_dir, status_callback=None, **kwargs):
+        super().__init__(master, **kwargs)
+        self.title("ATLAS - VISOR 3D")
+        self.configure(fg_color=COLORS["bg"])
+
+        self.preview_3d = FBXPreviewPanel(self, fbx_dir, stl_dir,
+                                          status_callback=status_callback)
+        self.preview_3d.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self.geometry("1280x900")
+        self.minsize(800, 600)
+        # Una vez dibujada la ventana, forzar el render con el tamaño real.
+        self.after(250, self._render_after_layout)
+        self.lift()
+        self.focus_force()
+
+    def _render_after_layout(self):
+        """Fuerza el render del visor 3D tras el primer layout de la ventana."""
+        try:
+            if self.preview_3d is not None and self.preview_3d._models:
+                self.preview_3d._render_to_label()
+        except Exception:
+            pass
+
+
+# =====================================================================
+# CLASE: Ventana 2D separada
+# =====================================================================
+class Viewer2DWindow(ctk.CTkToplevel):
+    """Ventana independiente que aloja las vistas 2D (axial/coronal/sagital)."""
+
+    def __init__(self, master, slice_dir, status_callback=None, **kwargs):
+        super().__init__(master, **kwargs)
+        self.title("ATLAS - VISTAS 2D")
+        self.configure(fg_color=COLORS["bg"])
+
+        self.slices_2d = Slice2DPanel(self, slice_dir)
+        self.slices_2d.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self.geometry("1100x1200")
+        self.minsize(600, 700)
+        self.lift()
+        self.focus_force()
+
+
+# =====================================================================
+# CLASE: Visor Unificado 2D+3D → ahora en VENTANAS SEPARADAS
 # =====================================================================
 class UnifiedViewerPanel(ctk.CTkFrame):
-    """Panel que integra visor 3D (arriba) y vistas 2D (abajo) con mejor distribución."""
-    
+    """Controlador que abre EL VISOR 3D y LAS VISTAS 2D en VENTANAS SEPARADAS.
+
+    Mantiene la misma API (refresh_models / load_2d_slices / preview_3d /
+    slices_2d) para no romper el resto de la app, pero cada parte vive en su
+    propia ventana top-level en lugar de compartir un mismo espacio.
+    """
+
     def __init__(self, master, fbx_dir, stl_dir, slice_dir, status_callback=None, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(fg_color=COLORS["bg"], corner_radius=0)
-        
-        # Contenedor VERTICAL: 3D arriba (60%), 2D abajo (40%)
-        
-        # Visor 3D (60% de altura)
-        top_frame = ctk.CTkFrame(self, fg_color=COLORS["bg"])
-        top_frame.pack(side="top", fill="both", expand=True, padx=0, pady=(0, 8))
-        
-        self.preview_3d = FBXPreviewPanel(top_frame, fbx_dir, stl_dir, 
-                                         status_callback=status_callback)
-        self.preview_3d.pack(fill="both", expand=True)
-        
-        # Vistas 2D (40% de altura) - aprovechan todo el ancho
-        bottom_frame = ctk.CTkFrame(self, fg_color=COLORS["bg"])
-        bottom_frame.pack(side="bottom", fill="both", expand=True, padx=0)
-        
-        self.slices_2d = Slice2DPanel(bottom_frame, slice_dir)
-        self.slices_2d.pack(fill="both", expand=True)
-    
+        self._status_cb = status_callback
+        self.fbx_dir = fbx_dir
+        self.stl_dir = stl_dir
+        self.slice_dir = slice_dir
+
+        # Referencias a las ventanas separadas (se crean bajo demanda)
+        self._win3d = None
+        self._win2d = None
+        self.preview_3d = None  # se completa al abrir la ventana 3D
+        self.slices_2d = None   # se completa al abrir la ventana 2D
+
+        # Panel informativo + controles dentro del espacio de la app principal
+        info = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], corner_radius=12,
+                            border_width=1, border_color=COLORS["border"])
+        info.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(info, text="🔲  VISUALIZACIÓN EN VENTANAS SEPARADAS",
+                     font=(FONT_TITLE, 16, "bold"), text_color=COLORS["text"]).pack(pady=(24, 4))
+        ctk.CTkLabel(info, text="El visor 3D y las vistas 2D se abren en ventanas independientes "
+                                "para aprovechar al máximo el espacio de pantalla.",
+                     font=(FONT_FAMILY, 12), text_color=COLORS["text_secondary"],
+                     wraplength=500, justify="center").pack(pady=(0, 20))
+
+        btn_row = ctk.CTkFrame(info, fg_color="transparent")
+        btn_row.pack(pady=4)
+
+        self.btn_open_3d = ctk.CTkButton(
+            btn_row, text="🖥  Abrir Visor 3D", command=self.open_3d_window,
+            width=210, height=46, corner_radius=8, fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"], text_color=COLORS["on_accent"],
+            font=(FONT_TITLE, 14, "bold"))
+        self.btn_open_3d.pack(side="left", padx=8)
+
+        self.btn_open_2d = ctk.CTkButton(
+            btn_row, text="🗂  Abrir Vistas 2D", command=self.open_2d_window,
+            width=210, height=46, corner_radius=8, fg_color=COLORS["bg_card"],
+            hover_color=COLORS["bg_input"], border_color=COLORS["border"],
+            border_width=1, font=(FONT_TITLE, 14, "bold"))
+        self.btn_open_2d.pack(side="left", padx=8)
+
+        ctk.CTkLabel(info, text="Consejo: maximiza cada ventana para la máxima resolución de render.",
+                     font=(FONT_FAMILY, 11), text_color=COLORS["text_secondary"]).pack(pady=(18, 8))
+
+    def _log(self, message, level="INFO"):
+        if self._status_cb:
+            self._status_cb(message, level)
+
+    def open_3d_window(self):
+        """Abre (o trae al frente) la ventana 3D independiente."""
+        if self._win3d is None or not self._win3d.winfo_exists():
+            self._win3d = Viewer3DWindow(self, self.fbx_dir, self.stl_dir,
+                                         status_callback=self._status_cb)
+            self.preview_3d = self._win3d.preview_3d
+            self._win3d.protocol("WM_DELETE_WINDOW", self._close_win3d)
+        else:
+            self._win3d.deiconify()
+            self._win3d.lift()
+            self._win3d.focus_force()
+        return self._win3d
+
+    def open_2d_window(self):
+        """Abre (o trae al frente) la ventana 2D independiente."""
+        if self._win2d is None or not self._win2d.winfo_exists():
+            self._win2d = Viewer2DWindow(self, self.slice_dir)
+            self.slices_2d = self._win2d.slices_2d
+            self._win2d.protocol("WM_DELETE_WINDOW", self._close_win2d)
+        else:
+            self._win2d.deiconify()
+            self._win2d.lift()
+            self._win2d.focus_force()
+        return self._win2d
+
+    def _close_win3d(self):
+        if self._win3d is not None:
+            try:
+                self._win3d.destroy()
+            except Exception:
+                pass
+        self._win3d = None
+        self.preview_3d = None
+
+    def _close_win2d(self):
+        if self._win2d is not None:
+            try:
+                self._win2d.destroy()
+            except Exception:
+                pass
+        self._win2d = None
+        self.slices_2d = None
+
+    def ensure_open(self):
+        """Abre ambas ventanas (conveniente al arrancar)."""
+        self.open_3d_window()
+        self.open_2d_window()
+
     def refresh_models(self):
-        """Actualiza el visor 3D."""
-        if hasattr(self, "preview_3d"):
+        """Actualiza el visor 3D (en su ventana separada), abriéndola si hace falta."""
+        if self._win3d is None or not self._win3d.winfo_exists():
+            self.open_3d_window()
+        if self.preview_3d is not None:
             self.preview_3d.refresh_models()
-    
+
     def load_2d_slices(self):
-        """Carga las vistas 2D."""
-        if hasattr(self, "slices_2d"):
+        """Carga las vistas 2D (en su ventana separada), abriéndola si hace falta."""
+        if self._win2d is None or not self._win2d.winfo_exists():
+            self.open_2d_window()
+        if self.slices_2d is not None:
             self.slices_2d.load_slices()
 
 
@@ -629,8 +811,20 @@ class FBXPreviewPanel(ctk.CTkFrame):
         self._ren_win = vtk.vtkRenderWindow()
         self._ren_win.AddRenderer(self._ren)
         self._ren_win.SetOffScreenRendering(1)
-        # Renderizado de máxima calidad
-        self._ren_win.SetSize(1280, 960)  # Alta resolución interna
+        # ========== RENDERIZADO DE MÁXIMA CALIDAD ==========
+        # Alta resolución interna; durante la interacción se ajusta al tamaño
+        # real del lienzo (ver _render_to_label), sin comprimir el resultado.
+        self._ren_win.SetSize(1920, 1200)
+        # Anti-aliasing (MSAA) para bordes suaves. Valores altos = mejor calidad.
+        try:
+            self._ren_win.SetMultiSamples(8)
+        except Exception:
+            pass
+        # Detector de frame buffer de máxima calidad (FXAA = filtrado de bordes).
+        try:
+            self._ren.SetUseFXAA(1)
+        except Exception:
+            pass
         self._vtk_initialized = True
 
     def _mesh_to_polydata(self, vs, faces):

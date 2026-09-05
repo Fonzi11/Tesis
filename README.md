@@ -4,62 +4,78 @@ Segmentación y modelado 3D de neuroimágenes para diagnóstico asistido por IA.
 
 ## 📦 Contenido
 
-- **`ATLAS/`** — Aplicación principal con interfaz gráfica (customtkinter) para:
-  - Procesamiento de imágenes médicas **DICOM / NIfTI**
-  - Segmentación automática de estructuras cerebrales (TotalSegmentator, BRATS 2020)
-  - Detección de tumores y aneurismas
-  - Generación de modelos 3D imprimibles (STL) y exportables (FBX)
-- **`Intentos/`** — Herramientas de desarrollo Blender para conversión STL → FBX con colores por vértice
-- **`tools/`** — Utilidades auxiliares (p. ej., descarga de muestra BraTS2021)
+- **`NEUROHUB/`** — Plataforma principal (tkinter + pygame + turtle):
+  - Visualización de DICOM/NIfTI
+  - Segmentación completa (máscara de tumor, cráneo, cerebro, vasculatura)
+  - Fac-export único: `salidas/fbx/neurohub_completo.fbx` (6 materiales)
+  - Visor 3D pygame con ventana adaptativa y resolución auto-ajustable
+  - Panel educativo interactivo (turtle)
+- **`ATLAS/`** — Aplicación de segmentación avanzada (customtkinter, legado):
+  - Procesamiento de imágenes médicas DICOM / NIfTI
+  - Segmentación automática con TotalSegmentator, BRATS 2020
+  - Sus modelos 3D se guardan en `archivo/modelos_3d/`
+- **`docs/`** — Documentación (arquitectura, cambios, guías) + scripts de demo
+- **`herramientas/`** — Utilidades (preview, FBX único, validación, verificación)
+- **`archivo/`** — Material histórico / residual (modelos antiguos, debug)
 
 ## 🚀 Inicio rápido
 
+### NEUROHUB (plataforma principal)
 ```bash
-cd ATLAS
-pip install -r requirements.txt
+cd NEUROHUB
 python launcher.py
 ```
 
-Para generar un ejecutable:
-
+### ATLAS (segmentación avanzada, legado)
 ```bash
-python build_exe.py   # genera ATLAS/dist/ATLAS.exe
+cd ATLAS
+python launcher.py
 ```
 
 ## 📁 Estructura
 
 ```
 Tesis/
-├── ATLAS/                    # Aplicación principal
-│   ├── main.py              # Interfaz gráfica
-│   ├── launcher.py          # Lanzador con verificación de dependencias
-│   ├── build_exe.py         # Script para generar ejecutable
-│   ├── requirements.txt     # Dependencias
-│   └── src/                 # Módulos del pipeline
-│       ├── 01_procesamiento_dicom.py
-│       ├── 02_segmentacion_brats.py
-│       └── 03_integrar_brats.py
-├── data/                     # Datos de entrada (no versionados)
+├── README.md                 # Este índice
+├── NEUROHUB/                 # Plataforma principal
+│   ├── main.py              # Hub principal (tkinter/customtkinter)
+│   ├── launcher.py          # Verifica dependencias y lanza
+│   ├── build_exe.py         # Genera ejecutable con PyInstaller
+│   ├── tests/               # Scripts de verificación
+│   └── src/
+│       ├── data_manager.py  # Gestión datasets (BraTS, TCIA, ADAM)
+│       ├── viewer3d.py      # Visor 3D interactivo (pygame)
+│       └── anatomia.py      # Anatomía educativa (turtle)
+├── ATLAS/                    # Segmentación avanzada (legado)
+├── data/                     # Datos médicos (no versionados)
 │   ├── dicom/
-│   └── nifti/
-├── modelos_3d/               # Modelos 3D generados (no versionados)
-├── modelos_preentrenados/    # Pesos de IA (no versionados)
-├── salidas/                  # Resultados (no versionados)
-├── Intentos/                 # Herramientas de desarrollo
-└── tools/                    # Utilidades auxiliares
+│   └── nifti/               # incluye muestras BraTS2021
+├── salidas/                  # Resultados (mallas STL, FBX único, preview, neuronavegación)
+├── modelos_preentrenados/    # Pesos de IA
+├── docs/                     # Documentación del proyecto
+│   └── scripts/              # Demos de layout / arquitectura
+├── herramientas/             # Utilidades de desarrollo
+└── archivo/                  # Modelos y material histórico (no versionado)
 ```
 
-## 🛠️ Dependencias principales
+## 🎯 Pipeline
 
-- Python 3.10+
-- PyTorch, MONAI, TotalSegmentator
-- SimpleITK, trimesh, numpy, scipy, scikit-image
-- customtkinter
+```
+Input (DICOM/NIfTI)
+  → Preprocesamiento (SimpleITK)
+  → Segmentación (BRATS/TotalSegmentator/Heurística)
+  → Identificación (tumor con ET/ED/NCR, aneurisma con vasculatura)
+  → Visualización 3D (pygame) + 2D (slices)
+  → Exportación (STL + FBX único para Unity + NIfTI para neuronavegación)
+```
 
-> 📌 Los archivos médicos (`data/`), modelos 3D y pesos de IA se mantienen fuera
-> del repositorio por su tamaño (varios GB). Consulta `tools/descargar_braTS_muestra.py`
-> para descargar una muestra pública de datos BraTS.
+## 🔧 Dependencias
+
+```bash
+pip install -r NEUROHUB/requirements.txt
+pip install -r ATLAS/requirements.txt
+```
 
 ## 📄 Licencia
 
-Proyecto de tesis académica.
+Proyecto de tesis académica. Los datos de `data/` son públicos (BraTS, TCIA).

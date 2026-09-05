@@ -4,9 +4,15 @@
 import sys
 import os
 
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
+
 # Agregar paths necesarios
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "ATLAS"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "ATLAS", "src"))
+sys.path.insert(0, os.path.join(BASE, "ATLAS"))
+sys.path.insert(0, os.path.join(BASE, "ATLAS", "src"))
 
 print("[TEST] Verificando importaciones...")
 
@@ -57,7 +63,7 @@ except Exception as e:
 try:
     print("[✓] Importando main (primeras líneas)...", end=" ")
     # No hacer un import completo de main porque requiere la interfaz gráfica
-    with open(os.path.join(os.path.dirname(__file__), "ATLAS", "main.py")) as f:
+    with open(os.path.join(BASE, "ATLAS", "main.py"), encoding="utf-8") as f:
         code = f.read()
     compile(code, "main.py", "exec")
     print("OK (compilación exitosa)")

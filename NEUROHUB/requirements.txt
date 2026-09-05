@@ -1,0 +1,11 @@
+# NEUROHUB - Dependencias
+pygame>=2.5
+pyinstaller>=6.0
+customtkinter>=5.2
+SimpleITK>=2.3
+nibabel>=5.0
+numpy>=1.26
+scipy>=1.11
+scikit-image>=0.21
+trimesh>=4.0
+pillow>=10.0

@@ -3,12 +3,18 @@
 import os
 import sys
 
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
+
 # Agregar ATLAS al path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ATLAS'))
+sys.path.insert(0, os.path.join(BASE, 'ATLAS'))
 
 from PIL import Image
 
-slice_dir = os.path.join(os.path.dirname(__file__), "salidas", "segmentaciones_ai", "vistas_2d")
+slice_dir = os.path.join(BASE, "salidas", "segmentaciones_ai", "vistas_2d")
 
 print(f"[TEST] slice_dir: {slice_dir}")
 print(f"[TEST] Existe: {os.path.exists(slice_dir)}")

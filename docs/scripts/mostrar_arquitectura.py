@@ -211,7 +211,7 @@ if __name__ == "__main__":
     print(DEMO)
     
     # Guardar también en archivo
-    with open(Path(__file__).parent / "ARQUITECTURA_VISUAL.txt", "w", encoding="utf-8") as f:
+    with open(Path(__file__).parent.parent / "ARQUITECTURA_VISUAL.txt", "w", encoding="utf-8") as f:
         f.write(DEMO)
     
     print("\n✓ Arquitectura guardada en: ARQUITECTURA_VISUAL.txt")

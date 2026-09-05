@@ -8,6 +8,11 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
+
 def check_file_exists(path, description=""):
     """Verifica si un archivo existe"""
     exists = os.path.exists(path)
@@ -69,7 +74,7 @@ print("─" * 80)
 data_dirs = [
     "data/dicom",
     "data/nifti",
-    "modelos_3d",
+    "archivo/modelos_3d",
     "salidas",
     "ATLAS/assets/fonts",
 ]
@@ -82,10 +87,10 @@ print("\n4️⃣  DOCUMENTACIÓN GENERADA")
 print("─" * 80)
 
 doc_files = [
-    "CAMBIOS_IMPLEMENTADOS.md",
-    "ARQUITECTURA_VISUAL.txt",
-    "mostrar_arquitectura.py",
-    "RESUMEN_EJECUTIVO.txt",
+    "docs/CAMBIOS_IMPLEMENTADOS.md",
+    "docs/ARQUITECTURA_VISUAL.txt",
+    "docs/scripts/mostrar_arquitectura.py",
+    "docs/RESUMEN_EJECUTIVO.txt",
 ]
 
 for docfile in doc_files:

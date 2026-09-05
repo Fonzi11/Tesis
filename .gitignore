@@ -18,7 +18,7 @@ build/
 modelos_3d/
 modelos_preentrenados/
 ATLAS/modelos_preentrenados/
-_tools/
+archivo/
 
 # ===== Archivos 3D binarios (FBX/STL/OBJ) =====
 *.fbx

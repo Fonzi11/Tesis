@@ -263,16 +263,23 @@ def _postprocess_output(output, original_shape):
     # Aplicar umbral 0.5
     output = (output > 0.5).astype(np.uint8)
     
-    # Mapear a etiquetas según el post-procesamiento del bundle
-    # x[[2]] > 0 → 4 (ET), x[[0]] > 0 → 1 (NCR), x[[1]] > 0 → 2 (ED)
+    # Mapear a etiquetas segun el post-procesamiento OFICIAL del bundle (inference.json):
+    #   torch.where(x[[2]]>0, 4, torch.where(x[[0]]>0, 1, torch.where(x[[1]]>0, 2, 0)))
+    # La PRIORIDAD es: ET(4) > NCR(1) > ED(2).
+    #
+    # (Se corrigio un bug del orden anterior: se asignaba ET primero y luego
+    #  la sobrescribian NCR y ED, anulando la mascara de tumor realzado ET).
+    et = output[2] > 0
+    ncr = output[0] > 0
+    ed = output[1] > 0
+
     seg = np.zeros(output.shape[1:], dtype=np.uint8)
-    
-    # ET tiene prioridad (etiqueta 4)
-    seg[output[2] > 0] = 4
-    # NCR (etiqueta 1)
-    seg[output[0] > 0] = 1
-    # ED (etiqueta 2)
-    seg[output[1] > 0] = 2
+    # ET (etiqueta 4): prioridad maxima
+    seg[et] = 4
+    # NCR (etiqueta 1): si no es ET
+    seg[~et & ncr] = 1
+    # ED (etiqueta 2): si no es ni ET ni NCR
+    seg[~et & ~ncr & ed] = 2
     
     # Recortar al tamaño original si se hizo padding
     if seg.shape != original_shape:
@@ -330,6 +337,29 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
         print("[BRATS] No hay modalidades de MRI disponibles. Abortando.")
         return None
     
+
+    # === GUARDIA DE MODALIDAD ÚNICA ===
+    # El modelo BRATS se entrena con 4 modalidades MRI REALES y alineadas
+    # (T1ce, T1, T2, FLAIR) y distingue las subregiones por el CONTRASTE
+    # DIFERENCIAL entre ellas (p. ej. el tumor realzado ET es hiperintenso en
+    # T1ce respecto a T1; el edema ED se ve en FLAIR). Si todas las "4
+    # modalidades" apuntan al MISMO archivo (modalidad única duplicada),
+    # duplicar el volumen en los 4 canales destroza ese contraste y el modelo
+    # produce una segmentación catastrófica (marca casi todo el cerebro como
+    # tumor/edema).
+    #
+    # Por eso, si tan solo hay UNA modalidad real distinta, NO ejecutamos
+    # BRATS y dejamos que el pipeline aplique el método morfológico heurístico.
+    unique_paths = set()
+    for p in available.values():
+        unique_paths.add(os.path.abspath(p))
+    if len(unique_paths) < 2:
+        print("[BRATS] Solo hay una modalidad MRI distinta (o se duplicó el mismo "
+              "volumen en los 4 canales). BRATS exige múltiples modalidades reales "
+              "(T1ce, T1, T2, FLAIR) para distinguir correctamente las subregiones.")
+        print("[BRATS] Se usará el método heurístico morfológico en su lugar.")
+        return None
+
     # Descargar el bundle si es necesario
     bundle_dir = download_brats_bundle()
     if not bundle_dir:

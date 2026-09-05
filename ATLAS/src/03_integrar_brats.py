@@ -29,6 +29,81 @@ verify_brats_model = _brats_module.verify_brats_model
 BRATS_MASKS = _brats_module.BRATS_MASKS
 MODELOS_DIR = _brats_module.MODELOS_DIR
 
+_BRATS_MODS = ("t1", "t1ce", "t2", "flair")
+
+
+def _detect_brats_modalities(nifti_path, min_modalities=3):
+    """
+    Busca los archivos hermanos BraTS (4 modalidades) junto al NIfTI dado.
+
+    Convención BraTS: <paciente>_<mod>.nii.gz con mod in {t1, t1ce, t2, flair}.
+    Si el archivo seleccionado pertenece a un paciente BraTS (por ejemplo
+    BraTS2021_00000_flair.nii.gz), la función reconoce la modalidad del propio
+    archivo y completa t1/t1ce/t2/flair con los hermanos del mismo directorio.
+
+    Args:
+        nifti_path: Ruta al volumen NIfTI (cualquier modalidad).
+        min_modalities: Mínimo de modalidades REALES y distinas requeridas
+            para considerar que hay un paciente BraTS usable.
+
+    Returns:
+        dict | None: {t1, t1ce, t2, flair} con rutas absolutas, o None si no
+        hay suficientes modalidades distintas en el mismo directorio.
+    """
+    if not nifti_path or not os.path.exists(nifti_path):
+        return None
+
+    nifti_path = os.path.abspath(nifti_path)
+    padre = os.path.dirname(nifti_path)
+    base = os.path.basename(nifti_path)
+
+    # Quitar extensión para trabajar con el nombre base
+    name = base
+    for ext in (".nii.gz", ".nii"):
+        if name.lower().endswith(ext):
+            name = name[: -len(ext)]
+            break
+
+    found = {m: None for m in _BRATS_MODS}
+
+    # 1) Reconocer la modalidad del propio archivo (si la tiene)
+    patient_prefix = name
+    for mod in _BRATS_MODS:
+        if name.endswith("_" + mod):
+            found[mod] = nifti_path
+            patient_prefix = name[: -len("_" + mod)]
+            break
+
+    # 2) Buscar hermanos con el mismo prefijo de paciente
+    try:
+        siblings = sorted(
+            f for f in os.listdir(padre)
+            if f.lower().endswith((".nii", ".nii.gz"))
+            and os.path.abspath(os.path.join(padre, f)) != nifti_path
+        )
+    except OSError:
+        siblings = []
+
+    for f in siblings:
+        fname = f
+        for ext in (".nii.gz", ".nii"):
+            if fname.lower().endswith(ext):
+                fname = fname[: -len(ext)]
+                break
+        if not fname.startswith(patient_prefix):
+            continue
+        for mod in _BRATS_MODS:
+            if found[mod] is not None:
+                continue
+            if fname.endswith("_" + mod):
+                found[mod] = os.path.abspath(os.path.join(padre, f))
+                break
+
+    real = {m: p for m, p in found.items() if p and os.path.exists(p)}
+    if len(set(os.path.abspath(p) for p in real.values())) < min_modalities:
+        return None
+    return real
+
 
 def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
     """
@@ -50,6 +125,23 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
     
     os.makedirs(output_dir, exist_ok=True)
     results = {}
+
+    # El archivo tumor_brats.nii.gz puede quedar obsoleto de una ejecución
+    # anterior (p. ej. una segmentación BRATS catastrófica sobre modalidad
+    # única). Si en esta ejecución NO se produce un tumor BRATS real, hay que
+    # eliminarlo para que el pipeline principal regenere la máscara con el
+    # método morfológico heurístico (que sí da resultados correctos).
+    tumor_brats_path = os.path.join(output_dir, "tumor_brats.nii.gz")
+
+    def _purge_obsolete_tumor():
+        """Elimina una máscara BRATS obsoleta para evitar reutilizar resultados viejos."""
+        try:
+            if os.path.exists(tumor_brats_path):
+                os.remove(tumor_brats_path)
+                print("[INTEGRACIÓN] Eliminada máscara BRATS obsoleta "
+                      "(será regenerada por el método heurístico).")
+        except Exception as e:
+            print(f"[INTEGRACIÓN] Advertencia: no se pudo eliminar tumor_brats obsoleto: {e}")
     
     # Verificar que el modelo BRATS esté disponible
     if not verify_brats_model():
@@ -69,7 +161,22 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
     min_val = float(arr.min())
     max_val = float(arr.max())
     
-    is_ct = min_val < -100 or max_val > 2000
+    # === NUEVO: clasificacion CT/MRI robusta ===
+    # ANTES: is_ct = min_val < -100 or max_val > 2000  -> INCORRECTO,
+    # porque los volumenes MRI de BraTS superan 2000 con facilidad:
+    #   * flair llega a ~2900
+    #   * t1ce (con contraste) llega a ~12000+
+    # Asi que la regla max>2000 clasificaba pacientes BraTS completos
+    # como CT y BRATS nunca se ejecutaba.
+    #
+    # AHORA:
+    #   1. min_val < -100  => CT HU (el aire siempre es negativo, ~-1000).
+    #   2. Nombre con pista de modalidad MRI (flair/t1ce/_t1/_t2) => MRI.
+    #   3. Cualquier otro caso con rango no negativo => MRI (seguro).
+    fname = os.path.basename(nifti_path).lower()
+    mri_hint = any(k in fname for k in
+                   ("flair", "t1ce", "_t1", "_t2", "t2_", "t1_"))
+    is_ct = min_val < -100 and not mri_hint
     print(f"[INTEGRACIÓN] Rango de intensidad: [{min_val:.0f}, {max_val:.0f}]")
     print(f"[INTEGRACIÓN] Tipo de estudio: {'CT' if is_ct else 'MRI'}")
     
@@ -82,17 +189,51 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
         # pero con mejoras.
         print("[INTEGRACIÓN] Para CT, se recomienda usar el método heurístico del pipeline principal.")
         results["metodo"] = "heurístico"
+        _purge_obsolete_tumor()
     else:
         print("[INTEGRACIÓN] Estudio MRI detectado. Intentando segmentación con BRATS...")
         
-        # Buscar las 4 modalidades de MRI en el directorio
-        # En un estudio real, se necesitarían T1, T1ce, T2, FLAIR
-        # Por ahora, usar el mismo volumen para las 4 modalidades
-        brats_results = segment_tumor_brats_from_single_volume(
-            nifti_path, 
-            output_dir=os.path.join(output_dir, "brats")
-        )
-        
+        # === NUEVO: Auto-detección de paciente BraTS completo ===
+        # Si el archivo pertenece a un paciente BraTS (tiene hermanos
+        # *_t1 / *_t1ce / *_t2 / *_flair en el mismo directorio), se usa
+        # BRATS completo con las 4 modalidades REALES. Esto da la precisión
+        # clínica del modelo SegResNet entrenado con contraste multimodal.
+        mods_brats = _detect_brats_modalities(nifti_path)
+
+        if mods_brats:
+            print("[INTEGRACIÓN] Multimodalidad BraTS detectada — BRATS completo "
+                  f"({len([p for p in mods_brats.values() if p])} reales):")
+            for mod in ("t1", "t1ce", "t2", "flair"):
+                p = mods_brats.get(mod)
+                print(f"  - {mod.upper():5s}: "
+                      f"{os.path.basename(p) if p else 'NO DISPONIBLE'}")
+            brats_results = segment_brats_tumor(
+                mri_t1_path=mods_brats.get("t1"),
+                mri_t1ce_path=mods_brats.get("t1ce"),
+                mri_t2_path=mods_brats.get("t2"),
+                mri_flair_path=mods_brats.get("flair"),
+                output_dir=os.path.join(output_dir, "brats")
+            )
+        else:
+            # Sin hermanos BraTS: el volumen es de modalidad única. BRATS no
+            # funciona con 4 canales duplicados (el modelo destruiría el
+            # contraste diferencial que necesita), así que se delega en el
+            # método morfológico heurístico real del pipeline.
+            print("[INTEGRACIÓN] No se detectaron al menos 3 modalidades BraTS "
+                  "(t1, t1ce, t2, flair) en el directorio del archivo.")
+            print("[INTEGRACIÓN] BRATS 2020 exige 4 secuencias MRI reales y "
+                  "alineadas para distinguir ET/ED/NCR con precisión clínica.")
+            print("[INTEGRACIÓN] Un solo volumen (como MRBrainTumor1.nii.gz) "
+                  "no puede alimentar el modelo. Se usará el método heurístico "
+                  "morfológico como respaldo.")
+            print("[INTEGRACIÓN] 💡 Cargue un paciente BraTS completo (carpeta "
+                  "con *_flair, *_t1, *_t1ce y *_t2) y NEUROHUB activará la "
+                  "segmentación IA automáticamente.")
+            brats_results = segment_tumor_brats_from_single_volume(
+                nifti_path,
+                output_dir=os.path.join(output_dir, "brats")
+            )
+
         if brats_results:
             results["metodo"] = "BRATS"
             results["brats"] = brats_results
@@ -125,6 +266,7 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
         else:
             print("[INTEGRACIÓN] BRATS no produjo resultados. Usando método heurístico.")
             results["metodo"] = "heurístico"
+            _purge_obsolete_tumor()
     
     return results
 

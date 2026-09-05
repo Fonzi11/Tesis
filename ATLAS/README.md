@@ -40,14 +40,14 @@ Tesis/
 ├── data/                     # Datos de entrada
 │   ├── dicom/               # Archivos DICOM
 │   └── nifti/               # Archivos NIfTI
-├── modelos_3d/               # Modelos 3D generados
-│   ├── stl/                 # Archivos STL
-│   └── fbx/                 # Archivos FBX
+├── modelos_3d/               # Modelos 3D generados (histórico ATLAS, está en archivo/)
 ├── modelos_preentrenados/    # Modelos de IA
 ├── salidas/                  # Resultados
 │   ├── segmentaciones_ai/   # Máscaras de segmentación
 │   └── reportes/            # Reportes
-└── Intentos/                 # Archivos de desarrollo
+└── archivo/                  # Material archivado (modelos antiguos, utilidades de desarrollo)
+    ├── modelos_3d/           # Modelos 3D generados por ATLAS
+    └── Intentos/             # Herramientas de desarrollo Blender STL → FBX
 ```
 
 ## 🎯 Funcionalidades
