@@ -19,18 +19,38 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import trimesh
 
 # Estructura -> color RGB (0-1)
+# Presupuesto de caras por estructura para el RENDER. Las mallas se
+# reconstruyen con cientos de miles de caras, pero matplotlib dibuja un poligono
+# por cara: a esa densidad cada cara ocupa menos de un pixel y el borde que se le
+# dibuja (edgecolors) se convierte en una trama visible que hace parecer
+# granulada una malla que en realidad es suave. Se decima solo para dibujar,
+# nunca para medir ni guardar.
+MAX_CARAS_RENDER = 320000
+
 COLORES = {
-    "cerebro":   (0.65, 0.67, 0.72),   # gris cerebral
-    "craneo":    (0.92, 0.88, 0.80),   # hueso
-    "tumor":     (0.78, 0.15, 0.86),   # magenta
-    "arterias":  (0.88, 0.12, 0.12),   # rojo
-    "venas":     (0.10, 0.22, 0.78),   # azul
-    "vasos":     (0.82, 0.35, 0.10),   # naranja
+    "cerebro":   (0.83, 0.67, 0.62),   # rosa grisáceo orgánico (#D4A69A)
+    "craneo":    (0.91, 0.88, 0.83),   # hueso marfil cálido (#E8E0D4)
+    "tumor":     (0.75, 0.15, 0.43),   # magenta/crimson tumoral (#C0256E)
 }
-ORDEN = ["cerebro", "craneo", "tumor", "arterias", "venas", "vasos"]
+ORDEN = ["cerebro", "craneo", "tumor"]
 
 LUZ = np.array([0.45, -0.35, 0.82])
 LUZ = LUZ / np.linalg.norm(LUZ)
+
+
+def _decimar_para_render(malla, objetivo=MAX_CARAS_RENDER):
+    """Reduce la malla a un numero de caras que el render pueda dibujar bien.
+
+    No altera la malla guardada: es solo para pintar. Sin esto matplotlib dibuja
+    un poligono por cara y cada una queda en menos de un pixel, con su borde
+    anti-alias, y la superficie parece granulada aunque la malla sea suave.
+    """
+    if len(malla.faces) <= objetivo:
+        return malla
+    try:
+        return malla.simplify_quadric_decimation(face_count=objetivo)
+    except Exception:
+        return malla
 
 
 def cargar_mesh(ruta):
@@ -71,6 +91,12 @@ def main():
         f for f in os.listdir(mallas_dir)
         if f.lower().endswith(".stl")
     )
+
+    # Exclusión mutua clínica: Un paciente tiene tumor O aneurisma, NUNCA ambos simultáneamente
+    nombres_base = [os.path.splitext(f)[0].lower() for f in stls]
+    if "tumor" in nombres_base and "aneurisma" in nombres_base:
+        stls = [f for f in stls if os.path.splitext(f)[0].lower() != "aneurisma"]
+
     if not stls:
         print("[PREVIEW] [!] No hay archivos STL")
         sys.exit(1)
@@ -89,7 +115,7 @@ def main():
     meshes_cargadas = []
     for f in stls:
         try:
-            m = cargar_mesh(os.path.join(mallas_dir, f))
+            m = _decimar_para_render(cargar_mesh(os.path.join(mallas_dir, f)))
             if m is None or len(m.vertices) == 0:
                 continue
             meshes_cargadas.append((f, m))
@@ -157,13 +183,15 @@ def main():
             edge = tuple(np.clip(np.array(color) * 0.55, 0, 1))
             pc = Poly3DCollection(
                 verts[tris], facecolors=cara_colores,
-                edgecolors=edge, linewidths=0.18,
+                edgecolors=edge, linewidths=0.05,
                 alpha=alpha,
             )
         else:
             pc = Poly3DCollection(
                 verts[tris], facecolors=cara_colores,
-                edgecolors=(0.05, 0.05, 0.07), linewidths=0.12,
+                # Sin bordes por cara: a esta densidad el borde seria un
+                # pixel de ruido que hace parecer granulada una malla suave.
+                edgecolors="none", linewidths=0.0,
                 alpha=alpha,
             )
         ax.add_collection3d(pc)

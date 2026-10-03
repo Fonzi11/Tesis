@@ -1,11 +1,38 @@
 # NEUROHUB - Dependencias
-pygame>=2.5
-pyinstaller>=6.0
+#
+# La interfaz actual es PySide6/Qt (src/ui_qt). Las dependencias de tkinter
+# quedan solo para el visor legacy `main.py` y `src/viewer3d.py`, que se
+# mantienen como referencia y ya no son el punto de entrada: si solo vas a
+# usar la app Qt, no hacen falta.
+
+# --- Interfaz (Qt) ---
+PySide6>=6.5
+
+# --- Interfaz legacy (opcional: main.py / src/viewer3d.py) ---
 customtkinter>=5.2
+pygame>=2.5
+
+# --- Empaquetado y utilidades ---
+pyinstaller>=6.0
+pillow>=10.0
+
+# --- Visor 3D (render VTK offscreen) ---
+vtk>=9.3
+pyvista>=0.43
+fast-simplification>=0.1.7
+
+# --- Datos médicos y procesamiento ---
 SimpleITK>=2.3
 nibabel>=5.0
 numpy>=1.26
 scipy>=1.11
 scikit-image>=0.21
 trimesh>=4.0
-pillow>=10.0
+
+# --- Segmentación IA ---
+# TotalSegmentator es la única vía fiable para cerebro y cráneo, tanto en CT
+# como en RM, así que el pipeline completo (procesar_caso.py) sí lo necesita.
+# torch queda fuera porque se instala como dependencia suya (la versión con
+# CUDA solo se quiere si hay GPU; en CPU funciona igual, más lento).
+TotalSegmentator>=2.4
+# monai  (opcional: segmentación de tumor con modelos BraTS)

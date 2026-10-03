@@ -27,7 +27,7 @@ def demo_window():
     """Ventana de demostración con layout mejorado."""
     
     app = ctk.CTk()
-    app.title("ATLAS v1.1 - Layout Mejorado")
+    app.title("NEUROHUB v1.1 - Layout Mejorado")
     app.geometry("1400x1000")
     app.configure(fg_color=COLORS["bg"])
     
@@ -38,7 +38,7 @@ def demo_window():
     header.pack(fill="x", padx=0, pady=0)
     header.pack_propagate(False)
     
-    title = ctk.CTkLabel(header, text="PROYECTO ATLAS - Visualización Integrada 2D+3D",
+    title = ctk.CTkLabel(header, text="PROYECTO NEUROHUB - Visualización Integrada 2D+3D",
                         font=(FONT_TITLE, 20, "bold"), text_color=COLORS["accent"])
     title.pack(side="left", padx=20, pady=10)
     
@@ -145,7 +145,7 @@ def demo_window():
     print("""
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║                                                                            ║
-║             DEMO: LAYOUT MEJORADO PARA ATLAS v1.1                         ║
+║             DEMO: LAYOUT MEJORADO PARA NEUROHUB v1.1                         ║
 ║                                                                            ║
 ║  VENTAJAS DE ESTA DISPOSICIÓN:                                            ║
 ║  ✓ Visor 3D: Ocupa espacio completo arriba (máxima visibilidad)          ║

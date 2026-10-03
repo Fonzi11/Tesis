@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de demostración de la arquitectura visual del ATLAS mejorado.
+Script de demostración de la arquitectura visual of NEUROHUB.
 Muestra el layout 2D+3D y explica cómo interactúan los componentes.
 """
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 DEMO = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                         ATLAS v1.1 - INTERFAZ MEJORADA                       ║
+║                         NEUROHUB v1.1 - INTERFAZ MEJORADA                       ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -184,7 +184,7 @@ INTERFAZ (CustomTkinter)
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 1. EJECUTAR INTERFAZ GRÁFICA
-   $ cd d:\\Tesis\\ATLAS
+   $ cd d:\\Tesis\\NEUROHUB
    $ python main.py
 
 2. CARGAR UN DICOM REAL

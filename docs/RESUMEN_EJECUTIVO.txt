@@ -1,7 +1,7 @@
 ✅ IMPLEMENTACIÓN COMPLETADA
 ═════════════════════════════════════════════════════════════════════════════
 
-PROYECTO: ATLAS v1.1 - Renderizado UltraDetalle + Visualización Integrada 2D/3D
+PROYECTO: NEUROHUB v1.1 - Renderizado UltraDetalle + Visualización Integrada 2D/3D
 ESTADO: ✅ COMPLETADO Y VALIDADO
 
 ═════════════════════════════════════════════════════════════════════════════
@@ -37,7 +37,7 @@ ESTADO: ✅ COMPLETADO Y VALIDADO
 📊 CAMBIOS POR ARCHIVO
 ═════════════════════════════════════════════════════════════════════════════
 
-1️⃣  ATLAS/main.py (1575 líneas)
+1️⃣  NEUROHUB/main.py (1575 líneas)
     ├─ ✨ Nuevas clases:
     │  ├─ Slice2DPanel (línea 274): Panel de vistas 2D
     │  └─ UnifiedViewerPanel (línea 343): Panel integrado 2D/3D
@@ -62,7 +62,7 @@ ESTADO: ✅ COMPLETADO Y VALIDADO
     └─ ⚡ Pipeline (línea 1557-1581):
        └─ Refresca vistas 2D tras BRATS
 
-2️⃣  ATLAS/src/04_slices_2d.py (260 líneas)
+2️⃣  NEUROHUB/src/04_slices_2d.py (260 líneas)
     ├─ 📈 Normalización (línea 50-64):
     │  ├─ Percentiles: [1.0, 99.5] → [0.5, 99.5]
     │  └─ Gamma: 0.85 → 0.80
@@ -80,7 +80,7 @@ ESTADO: ✅ COMPLETADO Y VALIDADO
        ├─ Fuente: 22pt → 24pt
        └─ Fondo: 150 → 180
 
-3️⃣  ATLAS/src/03_integrar_brats.py (400+ líneas)
+3️⃣  NEUROHUB/src/03_integrar_brats.py (400+ líneas)
     └─ ✨ Generación automática (línea 110-127):
        ├─ Importa dinámicamente: 04_slices_2d.generar_vistas_2d()
        ├─ Crea directorio: vistas_2d/
@@ -113,8 +113,8 @@ ESTADO: ✅ COMPLETADO Y VALIDADO
 🚀 CÓMO USAR (INMEDIATAMENTE)
 ═════════════════════════════════════════════════════════════════════════════
 
-1. Abre ATLAS:
-   $ cd d:\Tesis\ATLAS
+1. Abre NEUROHUB:
+   $ cd d:\Tesis\NEUROHUB
    $ python main.py
 
 2. Selecciona archivo DICOM/NIfTI:

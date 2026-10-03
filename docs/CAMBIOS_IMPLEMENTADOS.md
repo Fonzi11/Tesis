@@ -1,4 +1,4 @@
-# 📋 CAMBIOS IMPLEMENTADOS - ATLAS v1.1 (ULTRADETALLE + 2D/3D)
+# 📋 CAMBIOS IMPLEMENTADOS - NEUROHUB v1.1 (ULTRADETALLE + 2D/3D)
 
 ## 🎯 Objetivos Completados
 
@@ -24,7 +24,7 @@
 
 ## 📝 ARCHIVOS MODIFICADOS
 
-### 1. `ATLAS/main.py`
+### 1. `NEUROHUB/main.py`
 
 #### Nuevas Clases
 
@@ -104,7 +104,7 @@ self._refresh_preview_async()
 
 ---
 
-### 2. `ATLAS/src/04_slices_2d.py`
+### 2. `NEUROHUB/src/04_slices_2d.py`
 
 #### Normalización Mejorada (línea 50-64)
 
@@ -166,7 +166,7 @@ draw.rectangle((0, rgb.height - 48, rgb.width, rgb.height), fill=(0, 0, 0, 180))
 
 ---
 
-### 3. `ATLAS/src/03_integrar_brats.py`
+### 3. `NEUROHUB/src/03_integrar_brats.py`
 
 #### Generación Automática de Vistas 2D (línea 110-127)
 

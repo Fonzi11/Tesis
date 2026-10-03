@@ -1,8 +1,8 @@
-# 📋 ÍNDICE - ATLAS v1.1 (ULTRADETALLE + 2D/3D INTEGRADO)
+# 📋 ÍNDICE - NEUROHUB v1.1 (ULTRADETALLE + 2D/3D INTEGRADO)
 
 ## ✅ IMPLEMENTACIÓN COMPLETADA
 
-Tu proyecto ATLAS ha sido mejorado exitosamente con:
+Tu proyecto NEUROHUB ha sido mejorado exitosamente con:
 - **Renderizado 3D de ULTRADETALLE** (iluminación profesional, SpecularPower 64)
 - **Renderizado 2D de ULTRADETALLE** (1024px, 3x supersampling, contraste optimizado)
 - **Visualización integrada 2D+3D** (layout 70/30 lado a lado)
@@ -14,7 +14,7 @@ Tu proyecto ATLAS ha sido mejorado exitosamente con:
 
 ### 1. **RESUMEN_EJECUTIVO.txt** ⭐ LÉEME PRIMERO
    - Resumen ejecutivo de todos los cambios
-   - Cómo usar ATLAS inmediatamente
+   - Cómo usar NEUROHUB inmediatamente
    - Parámetros ajustables
    - Estado de verificaciones
 
@@ -43,7 +43,7 @@ Tu proyecto ATLAS ha sido mejorado exitosamente con:
 
 ## 🔧 ARCHIVOS MODIFICADOS
 
-### 1. **ATLAS/main.py** (1575 líneas)
+### 1. **NEUROHUB/main.py** (1575 líneas)
    **Cambios principales:**
    - ✨ Nuevas clases: `Slice2DPanel` + `UnifiedViewerPanel`
    - 🎨 Iluminación VTK mejorada: 3 luces profesionales
@@ -51,14 +51,14 @@ Tu proyecto ATLAS ha sido mejorado exitosamente con:
    - 🏗️ Interfaz: 70% visor 3D + 30% vistas 2D
    - 🔄 Refresh: Coordina 3D + 2D simultáneamente
 
-### 2. **ATLAS/src/04_slices_2d.py** (260 líneas)
+### 2. **NEUROHUB/src/04_slices_2d.py** (260 líneas)
    **Cambios principales:**
    - 📈 Contraste: Percentiles [0.5, 99.5] (más agresivos)
    - 📐 Resolución: 1024px (antes 700px)
    - 🎯 Supersampling: 3x (antes 2x)
    - 💎 Gamma: 0.80 (antes 0.85)
 
-### 3. **ATLAS/src/03_integrar_brats.py** (400+ líneas)
+### 3. **NEUROHUB/src/03_integrar_brats.py** (400+ líneas)
    **Cambios principales:**
    - ✨ Generación automática de vistas 2D tras BRATS
    - 📂 Crea directorio: `salidas/segmentaciones_ai/vistas_2d/`
@@ -70,8 +70,8 @@ Tu proyecto ATLAS ha sido mejorado exitosamente con:
 ## 🚀 CÓMO USAR INMEDIATAMENTE
 
 ```bash
-# 1. Abre terminal en la carpeta ATLAS
-cd d:\Tesis\ATLAS
+# 1. Abre terminal en la carpeta NEUROHUB
+cd d:\Tesis\NEUROHUB
 
 # 2. Ejecuta la aplicación
 python main.py
@@ -99,13 +99,13 @@ python main.py
 
 Si necesitas ajustar para **mejor rendimiento** (reduce lag):
 ```python
-# En ATLAS/src/03_integrar_brats.py línea 122:
+# En NEUROHUB/src/03_integrar_brats.py línea 122:
 vistas = generar_vistas_2d(nifti_path, dst, slice_dir, escala=2)  # antes: 3
 ```
 
 Si necesitas **más detalle** (más lento):
 ```python
-# En ATLAS/src/03_integrar_brats.py línea 122:
+# En NEUROHUB/src/03_integrar_brats.py línea 122:
 vistas = generar_vistas_2d(nifti_path, dst, slice_dir, escala=4)  # antes: 3
 ```
 
@@ -203,9 +203,9 @@ Ver resultado completo: `python verificar_instalacion.py`
 
 ## 🎉 ¡LISTO!
 
-Tu proyecto ATLAS v1.1 está completamente implementado y validado.
+Tu proyecto NEUROHUB v1.1 está completamente implementado y validado.
 
-**Próximo paso:** Ejecuta `python main.py` en `d:\Tesis\ATLAS` y prueba con datos reales.
+**Próximo paso:** Ejecuta `python main.py` en `d:\Tesis\NEUROHUB` y prueba con datos reales.
 
 ---
 

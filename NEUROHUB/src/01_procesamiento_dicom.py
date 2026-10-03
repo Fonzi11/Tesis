@@ -181,20 +181,37 @@ def resolve_input_volume(input_path, output_nifti):
     )
 
 
-def _build_totalsegmentator_command(input_nifti, output_dir, fast_mode=False):
+def _build_totalsegmentator_command(input_nifti, output_dir, fast_mode=False, device="gpu"):
     # Ejecutar siempre con el intrprete activo evita inconsistencias con wrappers .EXE.
+    # Se invoca el lanzador shim y no `python -m totalsegmentator...` porque el
+    # shim envuelve torch.load; ver _totalsegmentator_shim_path.
     comando = [
         sys.executable,
-        "-m",
-        "totalsegmentator.bin.TotalSegmentator",
+        _totalsegmentator_shim_path(),
         "-i",
         input_nifti,
         "-o",
         output_dir,
+        "-d",
+        device,
     ]
     if fast_mode:
         comando.append("--fast")
     return comando
+
+
+def _totalsegmentator_shim_path():
+    """Ruta al lanzador que hace compatible TotalSegmentator con PyTorch >= 2.6.
+
+    PyTorch 2.6 cambio el valor por defecto de `weights_only` en torch.load a
+    True. Los checkpoints de nnUNetv2 (que usa TotalSegmentator) deserializan
+    objects de numpy y fallan con UnpicklingError si no se permiten. La variable
+    de entorno TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD que se usaba antes no la respeta
+    ninguna version de torch, asi que la unica forma fiable es envolver torch.load
+    en el proceso hijo.
+    """
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "totalsegmentator_shim.py")
 
 
 def _ensure_totalsegmentator_runtime_requirements():
@@ -514,176 +531,11 @@ def generate_tumor_mask(nifti_path, brain_mask_path, output_tumor_path,
     return output_tumor_path
 
 
-def _warn_if_not_contrast_study(image):
-    """
-    Verificacion best-effort de que el estudio es angiografico con contraste.
-    NIfTI no preserva de forma fiable las etiquetas DICOM originales (el tag
-    ContrastBolusAgent, 0018|0010, solo sobrevive si la conversion lo
-    propago explicitamente), asi que esto es una advertencia informativa,
-    no una validacion garantizada.
-    """
-    tag = "0018|0010"
-    try:
-        if image.HasMetaDataKey(tag) and image.GetMetaData(tag).strip():
-            print(f"   -> Contraste detectado en metadatos ({tag}): {image.GetMetaData(tag)}")
-            return True
-    except Exception:
-        pass
-    print("   -> [!] No se pudo confirmar por metadatos que el estudio tiene contraste. "
-          "La deteccion de vasos/aneurisma asume un estudio CTA/MRA; verifica "
-          "manualmente el protocolo de adquisicion antes de confiar en el resultado.")
-    return False
-
-
-def _resample_isotropic(sitk_image, target_spacing_mm=None, interpolator=sitk.sitkLinear,
-                         min_spacing_floor_mm=0.15):
-    """
-    Remuestrea sitk_image a espaciado isotropico. Si target_spacing_mm es None,
-    usa el eje de espaciado nativo MAS FINO disponible (maxima resolucion sin
-    inventar detalle que el escaneo no tiene), con un piso de seguridad
-    (min_spacing_floor_mm) para evitar tamanos de volumen absurdos si algun
-    metadato de espaciado viniera corrupto.
-    """
-    original_spacing = sitk_image.GetSpacing()
-    if target_spacing_mm is None:
-        target_spacing_mm = max(min(original_spacing), min_spacing_floor_mm)
-    original_size = sitk_image.GetSize()
-    new_size = [max(1, int(round(osz * ospc / target_spacing_mm)))
-                for osz, ospc in zip(original_size, original_spacing)]
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetOutputSpacing((target_spacing_mm,) * 3)
-    resampler.SetSize(new_size)
-    resampler.SetOutputDirection(sitk_image.GetDirection())
-    resampler.SetOutputOrigin(sitk_image.GetOrigin())
-    resampler.SetTransform(sitk.Transform())
-    resampler.SetDefaultPixelValue(0)
-    resampler.SetInterpolator(interpolator)
-    return resampler.Execute(sitk_image), target_spacing_mm
-
-
-def _crop_to_mask_bbox(image, mask_arr_zyx, margin_mm=5.0):
-    """Recorta `image` (sitk) al bounding box fisico de mask_arr_zyx (mismo grid que image), con margen."""
-    import scipy.ndimage as ndi
-    mask_bin = (mask_arr_zyx > 0).astype(np.uint8)
-    obj_slices = ndi.find_objects(mask_bin)
-    if not obj_slices or obj_slices[0] is None:
-        return image
-    sl = obj_slices[0]
-    spacing_xyz = image.GetSpacing()
-    size_xyz = image.GetSize()
-    margin_vox = [int(np.ceil(margin_mm / spacing_xyz[i])) for i in range(3)]
-    idx_x0 = max(0, sl[2].start - margin_vox[0]); idx_x1 = min(size_xyz[0], sl[2].stop + margin_vox[0])
-    idx_y0 = max(0, sl[1].start - margin_vox[1]); idx_y1 = min(size_xyz[1], sl[1].stop + margin_vox[1])
-    idx_z0 = max(0, sl[0].start - margin_vox[2]); idx_z1 = min(size_xyz[2], sl[0].stop + margin_vox[2])
-    start = (int(idx_x0), int(idx_y0), int(idx_z0))
-    size = (int(idx_x1 - idx_x0), int(idx_y1 - idx_y0), int(idx_z1 - idx_z0))
-    return sitk.RegionOfInterest(image, size, start)
-
-
-def generate_vessels_mask(nifti_path, brain_mask_path, output_vessels_path,
-                           frangi_sigmas_mm=(0.5, 1.0, 1.5, 2.0),
-                           target_spacing_mm=None, intensity_percentile=None):
-    """
-    Deteccion de venas y arterias -- v3 (isotropico + histeresis intensidad + vesselness).
-
-    v2 aplicaba Frangi usando un unico sigma "en voxeles" derivado del tamano
-    de voxel PROMEDIO -- esto es incorrecto en un volumen anisotropico (muy
-    comun en CT clinico: p.ej. 0.5mm en plano pero 3mm de grosor de corte),
-    porque el filtro de Frangi asume que una distancia de "1 voxel" significa
-    lo mismo en los 3 ejes. En una prueba con espaciado 0.5x0.5x3.0mm, ese
-    error producia una mascara con MAS DE 55,000 voxeles de falso positivo
-    (contra 840 voxeles reales de un vaso de prueba) -- consistente con
-    "identifico mal las venas y arterias".
-
-    v3 corrige esto:
-      1. Recorta al bounding box del cerebro (abarata el resto del proceso).
-      2. REMUESTREA a espaciado isotropico usando el eje nativo mas fino
-         (maxima resolucion real disponible, sin inventar detalle) antes de
-         calcular Frangi -- asi "1 voxel" de verdad significa lo mismo en
-         los 3 ejes.
-      3. Frangi + umbral de OTSU sobre el mapa de vesselness (adaptativo a
-         los datos, en vez de un percentil fijo arbitrario).
-      4. Histeresis igual que v2 (conservar componentes del umbral de
-         intensidad que tocan la zona tubular), porque Frangi solo sigue
-         subestimando dilataciones tipo aneurisma -- por eso NUNCA se usa
-         como mascara final, solo como validador de forma.
-      5. Remuestrea la mascara final de vuelta a la resolucion NATIVA del
-         estudio (el resto del pipeline, incluida la reconstruccion de
-         malla, sigue trabajando a resolucion original).
-    """
-    print("\n[+] Detectando venas y arterias del cerebro (isotropico + histeresis intensidad+Frangi)...")
-    if not os.path.exists(brain_mask_path):
-        return None
-
-    img = sitk.ReadImage(nifti_path)
-    mask = sitk.ReadImage(brain_mask_path)
-    _warn_if_not_contrast_study(img)
-
-    mask_arr_native = sitk.GetArrayFromImage(mask)
-    if not np.any(mask_arr_native > 0):
-        return None
-
-    import scipy.ndimage as ndi
-    from skimage import filters as skfilters
-    from skimage.filters import threshold_otsu
-
-    print("   -> Recortando al bounding box del cerebro...")
-    img_crop = _crop_to_mask_bbox(img, mask_arr_native, margin_mm=5.0)
-    mask_crop = _crop_to_mask_bbox(mask, mask_arr_native, margin_mm=5.0)
-
-    print("   -> Remuestreando a resolucion isotropica nativa (maxima precision) para el filtro de vesselness...")
-    img_iso, iso_spacing = _resample_isotropic(img_crop, target_spacing_mm, sitk.sitkLinear)
-    mask_iso, _ = _resample_isotropic(mask_crop, iso_spacing, sitk.sitkNearestNeighbor)
-    print(f"      spacing nativo: {tuple(round(s, 2) for s in img.GetSpacing())} mm  ->  "
-          f"spacing isotropico usado: {iso_spacing:.3f} mm  (volumen: {img_iso.GetSize()}, "
-          f"puede tardar mas que en baja resolucion)")
-
-    img_iso_arr = sitk.GetArrayFromImage(img_iso).astype(np.float32)
-    mask_iso_arr = sitk.GetArrayFromImage(mask_iso) > 0
-
-    brain_voxels_iso = img_iso_arr[mask_iso_arr]
-    if len(brain_voxels_iso) == 0:
-        return None
-
-    mean_val = np.mean(brain_voxels_iso)
-    std_val = np.std(brain_voxels_iso)
-    threshold = mean_val + 3.0 * std_val
-    intensity_mask = mask_iso_arr & (img_iso_arr > threshold)
-
-    if not np.any(intensity_mask):
-        print("   -> No hay voxeles por encima del umbral de intensidad.")
-        vessels_iso = np.zeros_like(mask_iso_arr, dtype=np.uint8)
-    else:
-        sigmas_vox = sorted(set(max(1, int(round(s / iso_spacing))) for s in frangi_sigmas_mm))
-        print(f"   -> Calculando vesselness (Frangi, sigmas={sigmas_vox} voxeles isotropicos)...")
-        vesselness = skfilters.frangi(img_iso_arr, sigmas=sigmas_vox, black_ridges=False)
-        vesselness[~mask_iso_arr] = 0
-
-        if not np.any(vesselness > 0):
-            print("   -> Vesselness nulo en la region cerebral; se usa solo el umbral de intensidad.")
-            vessels_iso = intensity_mask.astype(np.uint8)
-        else:
-            otsu_t = threshold_otsu(vesselness[vesselness > 0])
-            frangi_mask = vesselness > otsu_t
-            print(f"   -> Umbral de Otsu sobre vesselness: {otsu_t:.4f}")
-
-            print("   -> Histeresis: conservando componentes conexos validados por vesselness...")
-            labeled, n_comp = ndi.label(intensity_mask, structure=np.ones((3, 3, 3)))
-            touched_labels = np.unique(labeled[frangi_mask & (labeled > 0)])
-            touched_labels = touched_labels[touched_labels > 0]
-            vessels_iso = np.isin(labeled, touched_labels).astype(np.uint8)
-
-            n_descartados = n_comp - len(touched_labels)
-            print(f"   -> Componentes conservados: {len(touched_labels)} / {n_comp} "
-                  f"({n_descartados} descartados por no tener soporte tubular)")
-
-    vessels_iso_img = sitk.GetImageFromArray(vessels_iso)
-    vessels_iso_img.CopyInformation(img_iso)
-
-    print("   -> Remuestreando la mascara final de vuelta a la resolucion nativa...")
-    vessels_native = sitk.Resample(vessels_iso_img, img, sitk.Transform(), sitk.sitkNearestNeighbor, 0)
-    sitk.WriteImage(vessels_native, output_vessels_path)
-    return output_vessels_path
+# -----------------------------------------------------------------------------
+# NOTA: La segmentacion de vasos (venas y arterias) y los filtros angiograficos
+# han sido eliminados por inconsistencia clinica y falta de secuencias dedicadas
+# (MRA/CTA) en volumenes MRI convencionales.
+# -----------------------------------------------------------------------------
 
 
 def _paint_sphere(volume_zyx, center_idx_zyx, radius_mm, spacing_zyx):
@@ -882,15 +734,174 @@ def generate_aneurysm_candidates(nifti_path, vessels_mask_path, output_path,
     return output_path, reporte
 
 
-def generate_skull_mask(nifti_path, output_skull_path):
-    print("\n[+] Extrayendo cráneo por umbral HU...")
+def _esfericidad_wadell(mascara, spacing_zyx):
+    """Esfericidad de Wadell: 1 en una esfera, (pi/6)^(1/3)=0.806 en un cubo.
+
+    Se usa el ratio pi^(1/3)*(6V)^(2/3)/A sobre el volumen y el area reales de
+    la malla. La expresion sin normalizar (36*pi*V^2)^(1/3)/(4*pi*A)^(1/2)
+    devuelve ~10 en una esfera, porque su valor es el radio y no un cociente
+    adimensional, con lo que "esfericidad" no sirve para comparar ni puntuar.
+    """
+    import trimesh
+    from skimage import measure
+
+    v, f, _, _ = measure.marching_cubes(np.asarray(mascara, dtype=np.float32),
+                                        0.5, spacing=spacing_zyx)
+    if len(f) == 0:
+        return 0.0
+    malla = trimesh.Trimesh(vertices=v, faces=f, process=False)
+    vol, area = abs(malla.volume), float(malla.area)
+    if vol <= 0 or area <= 0:
+        return 0.0
+    return float(np.pi ** (1 / 3) * (6.0 * vol) ** (2 / 3) / area)
+
+
+def generate_tumor_mask_t1(nifti_path, brain_mask_path, output_tumor_path,
+                           umbral_nucleo=130.0, min_vol_cm3=0.8,
+                           radio_crecimiento_mm=6.0):
+    """Segmenta el tumor en RM T1 con contraste usando forma, no solo intensidad.
+
+    Por que hace falta una version propia
+    --------------------------------------
+    `generate_tumor_mask` puntua los nucleos brillantes por tamano + esfericidad
+    + intensidad. Ese criterio sirve en CT, donde un tumor realzado es lo mas
+    brillante del cerebro, pero falla en T1ce, y se verifico sobre
+    MRBrainTumor1.nii.gz:
+
+      1. En T1ce lo mas brillante tambien es la grasa subcutanea, la medula osea
+         y el contraste de los senos venosos. Al priorizar por volumen, el
+         detector eligio el seno occipital (4.5 cm3) en lugar de la lesion
+         frontal (5.2 cm3), de brillo y tamano comparables.
+      2. El tumor NO esta dentro de la mascara `brain` de TotalSegmentator: el
+         modelo lo excluye por ser una masa anomala. Buscar solo dentro de
+         `brain` no encuentra ningun candidato, asi que hay que buscar en la
+         convexidad rellena del cerebro.
+      3. Con umbral alto los vasos se fragmentan y el tumor queda como el unico
+         blob compacto por encima del minimo de volumen, lo que si lo separa de
+         un vaso tubular.
+
+    Criterio: un tumor es COMPACTO (los tres ejes del mismo orden) y HOMOGENEO.
+    Un vaso es tubular: un eje domina a los otros dos. El nucleo verificado es
+    la semilla de un crecimiento regional acotado en radio, para incluir el
+    borde de la masa y no solo su anillo mas brillante.
+    """
+    from scipy import ndimage as ndi
+    from skimage.segmentation import watershed
+
+    print("\n[+] Detectando tumor en T1ce (nucleo compacto + crecimiento acotado)...")
+    if not os.path.exists(brain_mask_path):
+        print(f"   [X] No existe la mascara de cerebro: {brain_mask_path}")
+        return None
+
+    img = sitk.ReadImage(nifti_path)
+    arr = sitk.GetArrayFromImage(img).astype(np.float32)
+    im_brain = sitk.ReadImage(brain_mask_path)
+    brain = sitk.GetArrayFromImage(im_brain) > 0
+
+    spacing_zyx = tuple(img.GetSpacing()[::-1])
+    vox_mm3 = float(np.prod(spacing_zyx))
+
+    # Convexidad cerebral: cierra y rellena, e incluye el tumor, que el modelo
+    # de TotalSegmentator excluye del interior de `brain`.
+    convex = ndi.binary_fill_holes(ndi.binary_closing(brain, iterations=2))
+    convex = ndi.binary_dilation(convex, iterations=2)
+
+    semilla = convex & (arr > float(umbral_nucleo))
+    semilla = ndi.binary_opening(semilla, iterations=1)
+    etiquetas, numero = ndi.label(semilla)
+
+    mejores = []
+    for i in range(1, numero + 1):
+        mascara = etiquetas == i
+        vol_cm3 = mascara.sum() * vox_mm3 / 1000.0
+        if vol_cm3 < float(min_vol_cm3):
+            continue
+        idx = np.nonzero(mascara)
+        ejes_mm = np.array([(idx[e].max() - idx[e].min()) for e in range(3)],
+                           dtype=np.float64) * np.array(spacing_zyx)
+        esf = _esfericidad_wadell(mascara, spacing_zyx)
+        elong = ejes_mm.max() / max(ejes_mm.min(), 1e-6)
+        puntos = esf + (0.3 if elong < 3.0 else -0.5) - (0.4 if ejes_mm.min() < 4.0 else 0.0)
+        mejores.append((puntos, i, vol_cm3, esf, ejes_mm))
+        print(f"   -> nucleo #{i}: {vol_cm3:.2f} cm3, esfericidad={esf:.2f}, "
+              f"ejes={np.round(ejes_mm, 1)} mm, elongacion={elong:.2f}")
+
+    if not mejores:
+        print("   [X] Ningun blob compacto supera el volumen minimo.")
+        return None
+
+    mejores.sort(reverse=True)
+    puntos, nucleo_id, vol_cm3, esf, ejes_mm = mejores[0]
+    print(f"   [OK] nucleo #{nucleo_id}: {vol_cm3:.2f} cm3, esfericidad={esf:.2f}")
+
+    # Crecimiento regional acotado en radio. Sin esa cota el watershed inunda
+    # toda la convexidad, porque el tejido cerebral tambien supera el umbral.
+    nucleo = etiquetas == nucleo_id
+    distancia = ndi.distance_transform_edt(~nucleo, sampling=spacing_zyx)
+    banda = convex & (arr > float(umbral_nucleo) * 0.62)
+    banda = ndi.binary_closing(banda, iterations=2) & convex
+    banda &= distancia <= float(radio_crecimiento_mm)
+
+    marcadores = np.zeros_like(etiquetas, dtype=np.int32)
+    marcadores[nucleo] = 1
+    tumor = watershed(-arr, markers=marcadores, mask=banda)
+    tumor = ndi.binary_opening(ndi.binary_fill_holes(tumor), iterations=1)
+
+    if tumor.sum() == 0:
+        print("   [X] El crecimiento regional no produjo mascara.")
+        return None
+
+    out = sitk.GetImageFromArray(tumor.astype(np.uint8))
+    out.CopyInformation(im_brain)
+    sitk.WriteImage(out, output_tumor_path)
+    print(f"   [OK] tumor: {tumor.sum():,} vox, "
+          f"{tumor.sum() * vox_mm3 / 1000.0:.2f} cm3 -> {output_tumor_path}")
+    return output_tumor_path, {
+        "metodo": "nucleo_compacto_t1_ce",
+        "nucleo_cm3": float(vol_cm3),
+        "esfericidad": float(esf),
+        "ejes_mm": [float(x) for x in ejes_mm],
+        "volumen_cm3": float(tumor.sum() * vox_mm3 / 1000.0),
+    }
+
+
+def generate_skull_mask(nifti_path, output_skull_path, umbral_hueso=300):
+    """Extrae el craneo por umbral de densidad, suponiendo TC (HU).
+
+    Solo es valido en CT. En RM el hueso no es denso: aparece como un vacio de
+    senal (valor bajo o cero), no como un pico alto, asi que un umbral de 300
+    sobre una RM no selecciona hueso sino los voxeles mas brilhantes, que son
+    grasa y contraste de senos. Por eso la funcion AVISA y se niega a escribir
+    una mascara en lugar de producir un resultado plausibile pero falso: el
+    llamador debe usar la mascara `skull` de TotalSegmentator, que si funciona
+    en RM.
+    """
+    print("\n[+] Extrayendo craneo por umbral de densidad...")
     img = sitk.ReadImage(nifti_path)
     img_arr = sitk.GetArrayFromImage(img)
+    if img_arr.dtype.kind == "f":
+        img_arr = img_arr.astype(np.float32)
+
+    # Deteccion de la modalidad: el rango tipico de una RM con contraste no
+    # llega a los ~1000+ HU de un TC con hueso, y su techo suele ser bajo.
+    techo = float(np.percentile(img_arr.astype(np.float32), 99.9))
+    if techo < 1200:
+        print(f"   [X] Esto no parece un TC: el percentil 99.9 es {techo:.0f} "
+              f"(un TC con hueso supera 1000).")
+        print("       En RM el hueso es un vacio de senal, no un pico, asi que el "
+              "umbral de densidad no lo puede detectar.")
+        print("       Usa la mascara 'skull' de TotalSegmentator, que si es valida en RM.")
+        return None
+
     skull_arr = np.zeros_like(img_arr)
-    skull_arr[img_arr > 300] = 1 # Umbral de hueso en CT
+    skull_arr[img_arr > float(umbral_hueso)] = 1
+    if skull_arr.sum() == 0:
+        print(f"   [X] Ningun voxel supera {umbral_hueso}: no hay craneo que extraer.")
+        return None
     out_img = sitk.GetImageFromArray(skull_arr)
     out_img.CopyInformation(img)
     sitk.WriteImage(out_img, output_skull_path)
+    print(f"   [OK] craneo: {int(skull_arr.sum()):,} vox -> {output_skull_path}")
     return output_skull_path
 
 
@@ -1098,7 +1109,7 @@ if __name__ == "__main__":
             generate_skull_mask(nifti_path, RUTA_MASCARA_CRANEO)
             
         generate_tumor_mask(nifti_path, RUTA_MASCARA_CEREBRO, RUTA_MASCARA_TUMOR)
-        generate_vessels_mask(nifti_path, RUTA_MASCARA_CEREBRO, RUTA_MASCARA_VASOS)
+        # generate_vessels_mask removed
 
         RUTA_MASCARA_ANEURISMA = os.path.join(RUTA_SEGMENTACIONES, "aneurisma_candidatos.nii.gz")
         _, reporte_aneurismas = generate_aneurysm_candidates(
@@ -1133,7 +1144,7 @@ if __name__ == "__main__":
                 )
 
         if os.path.exists(RUTA_MASCARA_VASOS):
-            stl_vasos = build_mesh(RUTA_MASCARA_VASOS, "./Venas_Arterias.stl", smooth_iterations=1)
+            # stl_vasos removed
             if stl_vasos:
                 export_stl_to_single_fbx(
                     stl_vasos, "./Venas_Arterias.fbx",

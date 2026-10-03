@@ -9,6 +9,15 @@ env/
 # ===== Datos médicos (DICOM / NIfTI) =====
 data/
 
+# ===== Copias de referencia / fuentes externas (se descargan aparte) =====
+pyradiomics-*/
+ref_*.tar.gz
+
+# ===== Capturas de depuración que sueltan los diag_*/check_* =====
+_v2d_*.png
+_captura_*.png
+NEUROHUB/salidas/
+
 # ===== Resultados y artefactos generados =====
 salidas/
 dist/

@@ -85,9 +85,9 @@ Input (DICOM/NIfTI)
 ## Notas de Implementación
 
 - **BraTS 2020**: El modelo MONAI `brats_mri_segmentation` (v0.4.4) pesa
-  ~33MB y se descarga automáticamente de MONAI Model Zoo (en `ATLAS/`)
+  ~33MB y se descarga automáticamente de MONAI Model Zoo (en `NEUROHUB/`)
 - **TotalSegmentator**: Segmenta >100 estructuras anatómicas, incluyendo
-  cerebro, cráneo, vasos (en ATLAS)
+  cerebro, cráneo, vasos (en NEUROHUB)
 - **Los archivos de ejemplo**: 12 pacientes BraTS2021 con 4 modalidades
   cada uno están en `data/nifti/braTS_sample/`
 

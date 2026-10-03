@@ -1,6 +1,6 @@
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                         ATLAS v1.1 - INTERFAZ MEJORADA                       ║
+║                         NEUROHUB v1.1 - INTERFAZ MEJORADA                       ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -23,7 +23,7 @@
 │  ┃ │     Modelo 3D                  │┃  ┃  │ AXIAL      │  ┃               │
 │  ┃ │     ────────────────           │┃  ┃  │ 1024×1024px│  ┃               │
 │  ┃ │     (Tumor con                 │┃  ┃  │ • Tumor    │  ┃               │
-│  ┃ │      iluminación                │┃  ┃  │ • Círculo  │  ┃               │
+│  ┃ │      iluminación                │┃  ┃  │ • Overlay  │  ┃               │
 │  ┃ │      profesional)               │┃  ┃  │ • Etiqueta │  ┃               │
 │  ┃ │                                │┃  ┃  └────────────┘  ┃               │
 │  ┃ │ • 3 luces (Key, Fill, Rim)     │┃  ┃  ┌────────────┐  ┃               │
@@ -135,9 +135,7 @@ RENDERIZADO 2D (PIL + NumPy)
   
 • Visualización Tumor:
   └─ Relleno: RGBA(255, 0, 170, 110) magenta 50%
-  └─ Borde: Erosión 1 iteración (antes 2)
-  └─ Círculo: RGBA(120, 255, 90, 255) verde láser
-  └─ Centroide: Cruz 15px×escala (antes 12px)
+  └─ Borde: RGBA(255, 80, 200, 255) rosa interior
   
 • Pie de Imagen:
   └─ Fuente: 24pt (antes 22pt)
@@ -176,7 +174,7 @@ INTERFAZ (CustomTkinter)
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 1. EJECUTAR INTERFAZ GRÁFICA
-   $ cd d:\Tesis\ATLAS
+   $ cd d:\Tesis\NEUROHUB
    $ python main.py
 
 2. CARGAR UN DICOM REAL

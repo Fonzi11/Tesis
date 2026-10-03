@@ -11,8 +11,8 @@ except Exception:
     pass
 
 # Agregar paths necesarios
-sys.path.insert(0, os.path.join(BASE, "ATLAS"))
-sys.path.insert(0, os.path.join(BASE, "ATLAS", "src"))
+sys.path.insert(0, os.path.join(BASE, "NEUROHUB"))
+sys.path.insert(0, os.path.join(BASE, "NEUROHUB", "src"))
 
 print("[TEST] Verificando importaciones...")
 
@@ -63,7 +63,7 @@ except Exception as e:
 try:
     print("[✓] Importando main (primeras líneas)...", end=" ")
     # No hacer un import completo de main porque requiere la interfaz gráfica
-    with open(os.path.join(BASE, "ATLAS", "main.py"), encoding="utf-8") as f:
+    with open(os.path.join(BASE, "NEUROHUB", "main.py"), encoding="utf-8") as f:
         code = f.read()
     compile(code, "main.py", "exec")
     print("OK (compilación exitosa)")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de verificación rápida del estado de ATLAS v1.1
+Script de verificación rápida del estado de NEUROHUB v1.1
 Verifica sintaxis, archivos, y estructura del proyecto
 """
 
@@ -33,7 +33,7 @@ def check_syntax(filepath):
         return False
 
 print("\n" + "="*80)
-print("✅ VERIFICACIÓN DE ATLAS v1.1")
+print("✅ VERIFICACIÓN DE NEUROHUB v1.1")
 print("="*80)
 
 base_path = Path("d:\\Tesis")
@@ -44,10 +44,10 @@ print("\n1️⃣  ARCHIVOS PRINCIPALES")
 print("─" * 80)
 
 atlas_files = [
-    ("ATLAS/main.py", "Interfaz principal"),
-    ("ATLAS/src/04_slices_2d.py", "Renderizado 2D"),
-    ("ATLAS/src/03_integrar_brats.py", "Pipeline BRATS"),
-    ("ATLAS/src/02_segmentacion_brats.py", "Segmentación BRATS"),
+    ("NEUROHUB/main.py", "Interfaz principal"),
+    ("NEUROHUB/src/04_slices_2d.py", "Renderizado 2D"),
+    ("NEUROHUB/src/03_integrar_brats.py", "Pipeline BRATS"),
+    ("NEUROHUB/src/02_segmentacion_brats.py", "Segmentación BRATS"),
 ]
 
 all_exist = True
@@ -76,7 +76,7 @@ data_dirs = [
     "data/nifti",
     "archivo/modelos_3d",
     "salidas",
-    "ATLAS/assets/fonts",
+    "NEUROHUB/assets/fonts",
 ]
 
 for dirpath in data_dirs:
@@ -103,7 +103,7 @@ print("─" * 80)
 # Verificar que UnifiedViewerPanel está en main.py
 print("  Verificando clases nuevas...")
 try:
-    with open("ATLAS/main.py", 'r', encoding='utf-8') as f:
+    with open("NEUROHUB/main.py", 'r', encoding='utf-8') as f:
         content = f.read()
         has_unified = "class UnifiedViewerPanel" in content
         has_slice2d = "class Slice2DPanel" in content
@@ -115,7 +115,7 @@ except Exception as e:
 # Verificar que generar_vistas_2d está siendo llamado en 03_integrar_brats.py
 print("  Verificando integración de vistas 2D...")
 try:
-    with open("ATLAS/src/03_integrar_brats.py", 'r', encoding='utf-8') as f:
+    with open("NEUROHUB/src/03_integrar_brats.py", 'r', encoding='utf-8') as f:
         content = f.read()
         has_auto_gen = "generar_vistas_2d" in content
         print(f"    {'✅' if has_auto_gen else '❌'} Generación automática de vistas 2D")
@@ -129,8 +129,8 @@ print("="*80)
 
 if all_exist and all_valid:
     print("\n✅ TODAS LAS VERIFICACIONES PASARON")
-    print("\n Puedes ejecutar ATLAS con:")
-    print("   $ cd d:\\Tesis\\ATLAS")
+    print("\n Puedes ejecutar NEUROHUB con:")
+    print("   $ cd d:\\Tesis\\NEUROHUB")
     print("   $ python main.py")
 else:
     print("\n⚠️  ALGUNAS VERIFICACIONES FALLARON")

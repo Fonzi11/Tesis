@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Descarga una muestra de NIfTI de tumores cerebrales (BraTS2021, datos abiertos
-de Hugging Face, sin autenticación) para validar el pipeline de ATLAS.
+de Hugging Face, sin autenticación) para validar el pipeline de NEUROHUB.
 
 Cada paciente incluye las 4 modalidades BraTS (flair, t1ce, t2, t1) y su máscara
 de segmentación (`_seg.nii.gz`), lo que permite verificar segmentación y 3D.
@@ -58,7 +58,7 @@ def descargar(pacientes, mods, salida):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Descarga muestra BraTS2021 para ATLAS")
+    ap = argparse.ArgumentParser(description="Descarga muestra BraTS2021 para NEUROHUB")
     ap.add_argument("--pacientes", type=int, default=10, help="Cantidad de pacientes")
     ap.add_argument("--mods", nargs="+", default=list(MODS),
                     help="Modalidades: flair t1ce t2 t1 seg")
