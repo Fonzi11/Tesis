@@ -23,7 +23,9 @@ import SimpleITK as sitk
 try:
     from scipy import ndimage
     from skimage import measure
-    from scipy.ndimage import gaussian_filter, binary_fill_holes
+    from scipy.ndimage import (
+        gaussian_filter, binary_fill_holes, binary_closing,
+    )
 except ImportError as e:
     print(f"[SEG3D] Dependencia faltante: {e}")
 
@@ -300,6 +302,41 @@ def _restringir_craneo_a_cerebro(craneo, cerebro, spacing,
     return resultado.astype(np.uint8)
 
 
+def _reparar_huecos_craneo(craneo, spacing, max_gap_mm=2.0):
+    """Cierra discontinuidades pequeñas sin fabricar una calota completa.
+
+    Solo se usa como reparación morfológica de la segmentación observada. La
+    abertura máxima está limitada en milímetros y no se rellenan cavidades
+    internas de la máscara, porque eso convertiría el defecto en anatomía
+    inventada. La máscara original sigue disponible en ``skull.nii.gz``.
+    """
+    mask = np.asarray(craneo, dtype=bool)
+    if not mask.any():
+        return mask.astype(np.uint8)
+    sx, sy, sz = (float(v) for v in spacing[:3])
+    radios = np.maximum(
+        1,
+        np.ceil(np.array([max_gap_mm / sz, max_gap_mm / sy,
+                          max_gap_mm / sx])).astype(int),
+    )
+    zz, yy, xx = np.ogrid[
+        -radios[0]:radios[0] + 1,
+        -radios[1]:radios[1] + 1,
+        -radios[2]:radios[2] + 1,
+    ]
+    estructura = (
+        (zz / radios[0]) ** 2
+        + (yy / radios[1]) ** 2
+        + (xx / radios[2]) ** 2
+    ) <= 1.0
+    reparada = binary_closing(mask, structure=estructura)
+    añadidos = int(np.count_nonzero(reparada & ~mask))
+    if añadidos:
+        print(f"[SEG3D] Cráneo: se cierran brechas pequeñas; "
+              f"{añadidos:,} voxels interpolados (máx. {max_gap_mm:g} mm).")
+    return reparada.astype(np.uint8)
+
+
 # =============================================================================
 # RECONSTRUCCIÓN DE MALLAS 3D (MÁXIMA RESOLUCIÓN)
 # =============================================================================
@@ -475,6 +512,8 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
         cerebro_arr, _cerebro_img = mascaras["cerebro"]
         craneo_arr = _restringir_craneo_a_cerebro(
             craneo_arr, cerebro_arr, craneo_img.GetSpacing())
+        craneo_arr = _reparar_huecos_craneo(
+            craneo_arr, craneo_img.GetSpacing())
         mascaras["craneo"] = (craneo_arr, craneo_img)
         ruta_limpia = os.path.join(salida_dir, "skull_cleaned.nii.gz")
         imagen_limpia = sitk.GetImageFromArray(craneo_arr.astype(np.uint8))

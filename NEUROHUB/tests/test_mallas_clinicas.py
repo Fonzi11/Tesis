@@ -76,3 +76,14 @@ def test_malla_remuestrea_spacing_mas_fino_sin_alargar_ejes():
     assert extension[0] < 9.0
     assert extension[1] < 9.0
     assert extension[2] < 5.0
+
+
+def test_repara_solo_brechas_pequenas_del_craneo():
+    """La reparación no debe completar una ausencia anatómica grande."""
+    craneo = np.zeros((20, 30, 30), dtype=np.uint8)
+    craneo[4:16, 5:25, 5] = 1
+    craneo[4:16, 5:25, 7] = 1
+    reparado = segmentacion._reparar_huecos_craneo(
+        craneo, (1.0, 1.0, 1.0), max_gap_mm=2.0)
+    assert reparado[:, :, 6].sum() > 0
+    assert reparado[:, :, 15].sum() == 0

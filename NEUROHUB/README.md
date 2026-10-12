@@ -147,6 +147,13 @@ percentiles, ya que no tienen HU. La detección es una ayuda de visualización,
 no una clasificación clínica: si el nombre o las intensidades son ambiguos,
 debe verificarse la modalidad del estudio antes de interpretar los hallazgos.
 
+La máscara del cráneo conserva el NIfTI original y genera además
+`skull_cleaned.nii.gz` para la malla. Esta salida solo corrige discontinuidades
+pequeñas (hasta 2 mm) y elimina extensiones incompatibles con la envolvente
+cerebral; no inventa hueso cuando la adquisición no lo contiene. Las
+reconstrucciones con pérdidas grandes deben revisarse con otra serie o por un
+especialista antes de usarse en Unity o realidad aumentada.
+
 ### Dónde busca el visor el volumen
 
 Al abrir un caso, el visor busca la imagen del paciente entre las NIfTI de la
