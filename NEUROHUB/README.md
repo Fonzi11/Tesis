@@ -62,8 +62,10 @@ D:\Tesis\.venv\Scripts\python.exe procesar_caso.py D:\Tesis\data\nifti\pacientes
 ```
 
 El último comando genera máscaras, mallas y renders bajo `D:\Tesis\salidas`.
-Para casos grandes puedes añadir `--rapido`; para la máxima resolución no lo
-añadas. `launcher.py doctor` informa si Docker/Raidionics está disponible, pero
+La interfaz Qt usa por defecto la máxima resolución de TotalSegmentator (sin
+`--fast`) para conservar detalle en los bordes del cerebro y el cráneo. Para
+casos grandes puedes añadir `--rapido`, aceptando una resolución aproximada de
+3 mm y menor detalle. `launcher.py doctor` informa si Docker/Raidionics está disponible, pero
 Docker no es necesario para el visor ni para el pipeline principal.
 
 ## 🖥️ Tecnologías

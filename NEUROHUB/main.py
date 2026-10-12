@@ -2131,7 +2131,8 @@ class AtlasApp(ctk.CTk):
             # Paso 2: Segmentación AI
             self._log("[2/5] Ejecutando segmentación AI (TotalSegmentator)...", "PROGRESS")
             self._update_progress(0.3)
-            self.pipeline_01.run_ai_segmentation(nifti_path, output_dir, fast_mode=True)
+            self.pipeline_01.run_ai_segmentation(
+                nifti_path, output_dir, fast_mode=False)
             self._log("Segmentación AI completada", "SUCCESS")
 
             # Paso 3: Segmentación de tumor (BRATS con respaldo morfológico)

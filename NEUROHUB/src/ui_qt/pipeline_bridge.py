@@ -262,7 +262,12 @@ class PipelineWorker(QObject):
         self.step.emit(2, "Segmentacion AI (TotalSegmentator)")
         self._info("[2/6] Ejecutando segmentacion AI (TotalSegmentator)...", "PROGRESS")
         self.progress.emit(0.3)
-        pipeline_01.run_ai_segmentation(nifti_path, self.output_dir, fast_mode=True)
+        # La ruta rapida de TotalSegmentator remuestrea a ~3 mm y pierde
+        # detalle de borde. Para cerebro y craneo se prioriza la resolucion
+        # nativa; `procesar_caso.py --rapido` sigue disponible para casos
+        # donde el tiempo sea mas importante que el detalle.
+        pipeline_01.run_ai_segmentation(
+            nifti_path, self.output_dir, fast_mode=False)
         self._info("Segmentacion AI completada", "SUCCESS")
 
         # ---------------- Paso 3: modo de analisis (excluyente) -----------
