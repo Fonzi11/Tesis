@@ -84,12 +84,14 @@ class Volumen2D:
     """
 
     def __init__(self, volumen_path=None, mascara_path=None, volumen=None,
-                 mascara=None, spacing=(1.0, 1.0, 1.0)):
+                 mascara=None, spacing=(1.0, 1.0, 1.0), modalidad=None):
         self.volumen_path = None
         self.mascara_path = None
         self.volumen = None
         self.mascara = None
         self.spacing = tuple(float(v) for v in spacing[:3])
+        self.modalidad = (str(modalidad).strip().upper()
+                          if modalidad else None)
         self.mascara_modificada = False
         self._imagen_ref = None        # imagen SimpleITK del volumen
         self._lo, self._hi = 0.0, 1.0
@@ -141,6 +143,7 @@ class Volumen2D:
         self.volumen = sitk.GetArrayFromImage(img).astype(np.float32)
         self.spacing = tuple(float(v) for v in img.GetSpacing())
         self._imagen_ref = img
+        self.modalidad = self._inferir_modalidad(volumen_path, self.volumen)
 
         self.mascara = np.zeros(self.volumen.shape, dtype=np.uint8)
         self.mascara_path = None
@@ -152,6 +155,20 @@ class Volumen2D:
             self.cargar_mascara(mascara_path)
         self.calcular_window()
         return self
+
+    @staticmethod
+    def _inferir_modalidad(ruta, volumen):
+        """Infiere CT/MRI sin confundir una máscara binaria con una imagen."""
+        nombre = os.path.basename(str(ruta)).lower()
+        if any(token in nombre for token in ("ct", "tac", "computed", "angio")):
+            return "CT"
+        muestra = np.asarray(volumen, dtype=np.float32)
+        validos = muestra[np.isfinite(muestra)]
+        if validos.size:
+            p1, p99 = np.percentile(validos, [1, 99])
+            if p1 < -200.0 or p99 - p1 > 1200.0:
+                return "CT"
+        return "MRI"
 
     def cargar_mascara(self, mascara_path):
         """Carga una mascara NIfTI exigiendo que comparta la rejilla del volumen.
@@ -204,7 +221,13 @@ class Volumen2D:
             if no_cero.size >= 0.3 * validos.size and no_cero.size > 256:
                 validos = no_cero
 
-        lo, hi = np.percentile(validos, percentiles)
+        if self.modalidad == "CT":
+            # Ventana cerebral de tejidos blandos (WL 40 / WW 120). Evita que
+            # el hueso domine la imagen como una radiografia y permite leer
+            # parenquima, edema y contraste intracraneal.
+            lo, hi = -20.0, 100.0
+        else:
+            lo, hi = np.percentile(validos, percentiles)
         if hi - lo < 1e-6:
             hi = lo + 1e-6
         self._lo, self._hi = float(lo), float(hi)
@@ -281,7 +304,7 @@ class Volumen2D:
     # RENDER DE UN CORTE
     # ==================================================================
     def render_corte(self, eje, indice, alto=512, clahe=True, unsharp=True,
-                     gamma=1.25, overlay=True, grosor_borde=GROSOR_BORDE):
+                     gamma=None, overlay=True, grosor_borde=GROSOR_BORDE):
         """Devuelve `(rgb_uint8, info)` del corte con el tumor encima.
 
         El resultado ya tiene el aspecto fisico corregido por el espaciado y
@@ -292,6 +315,8 @@ class Volumen2D:
         la barra de estado muestra mientras se navega.
         """
         e = eje_indice(eje)
+        if gamma is None:
+            gamma = 0.95 if self.modalidad == "CT" else 1.25
         mask = self.corte_mascara(e, indice) if overlay else None
         rgb = self._render_base(e, indice, alto, clahe, unsharp, gamma)
         if mask is not None and mask.any():

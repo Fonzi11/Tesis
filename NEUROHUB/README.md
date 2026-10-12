@@ -136,6 +136,17 @@ reconstruir la superficie de alta calidad y actualizar inmediatamente el visor
 3D. La aplicación muestra en la cabecera el backend real de inferencia:
 `AMD` cuando DirectML está disponible y `CPU` cuando no lo está.
 
+### Ventana médica de la imagen
+
+La ventana 2D detecta de forma conservadora si el volumen contiene intensidades
+de CT (incluyendo valores HU) o si se trata de una MRI. Para CT se aplica por
+defecto una ventana de cerebro de tejidos blandos (WL 40 / WW 120), en lugar
+de una ventana ósea global que hace que el estudio parezca una radiografía y
+oculta el parénquima. Las MRI conservan una normalización robusta por
+percentiles, ya que no tienen HU. La detección es una ayuda de visualización,
+no una clasificación clínica: si el nombre o las intensidades son ambiguos,
+debe verificarse la modalidad del estudio antes de interpretar los hallazgos.
+
 ### Dónde busca el visor el volumen
 
 Al abrir un caso, el visor busca la imagen del paciente entre las NIfTI de la

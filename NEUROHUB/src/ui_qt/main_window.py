@@ -303,10 +303,12 @@ class MainWindow(QMainWindow):
                     "Ninguna máscara encaja con la rejilla del volumen: se "
                     "carga la imagen SIN máscara para poder delinearla a mano",
                     "WARNING")
-            self.visor_2d.set_volumen(v2d.Volumen2D(volumen_path, mascara))
+            volumen_2d = v2d.Volumen2D(volumen_path, mascara)
+            self.visor_2d.set_volumen(volumen_2d)
             self.consola.log(
                 f"Visor 2D: {os.path.basename(volumen_path)}"
-                + (f" + {os.path.basename(mascara)}" if mascara else " (sin máscara)"),
+                + (f" + {os.path.basename(mascara)}" if mascara else " (sin máscara)")
+                + f" | ventana {volumen_2d.modalidad or 'AUTO'}",
                 "SUCCESS")
             return True
         except Exception as e:

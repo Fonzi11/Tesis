@@ -66,6 +66,15 @@ class TestEscalaPorEje:
             assert abs(ancho_px / kx - anisotropo.volumen.shape[otros[1]]) < 1
             assert abs(alto_px / ky - anisotropo.volumen.shape[otros[0]]) < 1
 
+    def test_ct_usa_ventana_de_cerebro_y_no_percentiles_globales(self):
+        vol = np.full((8, 16, 16), -1000.0, dtype=np.float32)
+        vol[:, 3:13, 3:13] = 45.0
+        vol[:, 6:10, 6:10] = 1800.0
+        v = v2d.Volumen2D(volumen=vol, spacing=(1.0, 1.0, 1.0))
+        v.modalidad = "CT"
+        v.calcular_window()
+        assert (v._lo, v._hi) == (-20.0, 100.0)
+
     def test_px_por_voxel_es_el_menor_de_los_dos(self, anisotropo):
         """Se conserva para el cursor; no debe cambiar de comportamiento."""
         for eje in ("axial", "coronal", "sagital"):
