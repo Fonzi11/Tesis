@@ -45,6 +45,10 @@ D:\Tesis\.venv\Scripts\python.exe launcher.py verificar --etapa deps --etapa imp
 En la interfaz, dentro de **Estudio**, usa **Carpeta DICOM...** para
 seleccionar la carpeta completa del estudio. La búsqueda incluye subcarpetas,
 por lo que no es necesario seleccionar los archivos `.dcm` uno por uno.
+También acepta estudios exportados como uno o varios `.zip` con archivos
+DICOM dentro de `DICOM/`; los ZIP ilegibles se omiten si existe otro archivo
+válido y se selecciona automáticamente la serie con más cortes (normalmente
+la adquisición volumétrica principal).
 **Archivo NIfTI...** queda disponible para cargar un volumen `.nii`/`.nii.gz`
 o un DICOM individual.
 
@@ -277,8 +281,8 @@ Soporta tres orígenes de entrada:
 
 - **NIfTI** (.nii.gz / .nii): carga directa del volumen
 - **DICOM** (.dcm): lee series completas con `ImageSeriesReader`
-- **Directorio DICOM**: detecta y carga la serie automáticamente
-  (incluye series con múltiples cortes)
+- **Directorio DICOM o ZIP DICOM**: detecta y carga automáticamente la serie
+  con más cortes (incluye series con múltiples cortes y ZIPs exportados)
 
 Función central: `data_manager.cargar_volumen(path)` — detecta el formato
 y carga transparentemente (NIfTI, DICOM suelto, serie DICOM, directorio).

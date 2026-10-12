@@ -5,6 +5,7 @@ import sys
 import shutil
 import importlib
 import textwrap
+import tempfile
 import zipfile
 import numpy as np
 import trimesh
@@ -105,52 +106,148 @@ def install_colab_dependencies():
 
 
 def _find_first_dicom_series(dicom_root):
-    """Busca recursivamente la primera serie DICOM vlida dentro de una carpeta."""
-    reader = sitk.ImageSeriesReader()
+    """Busca la serie DICOM volumétrica con más cortes.
 
-    # Primero intentamos directamente en la ruta raz.
+    Un estudio puede contener localizadores, reconstrucciones y la adquisición
+    principal en la misma carpeta. Elegir ``series_ids[0]`` seleccionaba a
+    veces una serie de solo dos imágenes y provocaba errores de dimensiones al
+    construir el volumen.
+    """
+    reader = sitk.ImageSeriesReader()
+    candidatas = []
+
+    # Primero intentamos directamente en la ruta raíz.
     series_ids = reader.GetGDCMSeriesIDs(dicom_root)
-    if series_ids:
-        series_id = series_ids[0]
+    for series_id in series_ids or []:
         file_names = reader.GetGDCMSeriesFileNames(dicom_root, series_id)
         if file_names:
-            return dicom_root, series_id, file_names
+            candidatas.append((len(file_names), dicom_root, series_id,
+                               file_names))
 
-    # Si no hay serie en raz, buscamos en subcarpetas.
+    # Si no hay serie en raíz, buscamos en subcarpetas.
     for current_dir, _, _ in os.walk(dicom_root):
         series_ids = reader.GetGDCMSeriesIDs(current_dir)
-        if not series_ids:
-            continue
+        for series_id in series_ids or []:
+            file_names = reader.GetGDCMSeriesFileNames(
+                current_dir, series_id)
+            if file_names:
+                candidatas.append((len(file_names), current_dir, series_id,
+                                   file_names))
 
-        series_id = series_ids[0]
-        file_names = reader.GetGDCMSeriesFileNames(current_dir, series_id)
-        if file_names:
-            return current_dir, series_id, file_names
+    if not candidatas:
+        return None, None, []
+    _, series_dir, series_id, file_names = max(
+        candidatas, key=lambda item: item[0])
+    return series_dir, series_id, file_names
 
-    return None, None, []
+
+def _extraer_zips_dicom(dicom_root):
+    """Extrae temporalmente ZIPs que contienen DICOM y devuelve su carpeta.
+
+    Algunos estudios exportados se entregan como una carpeta que contiene uno
+    o varios ZIPs (`890923.zip`, `892984.zip`) con los cortes en
+    `DICOM/*.dcm`. GDCM no inspecciona archivos dentro de ZIP, por lo que se
+    extraen a una carpeta temporal. Los ZIP originales nunca se modifican.
+    """
+    archivos_zip = []
+    for current_dir, _, files in os.walk(dicom_root):
+        for nombre in files:
+            if nombre.lower().endswith(".zip"):
+                archivos_zip.append(os.path.join(current_dir, nombre))
+
+    if not archivos_zip:
+        return None, 0
+
+    destino = tempfile.mkdtemp(prefix="neurohub_dicom_")
+    extraidos = 0
+    try:
+        for ruta_zip in sorted(archivos_zip):
+            try:
+                archivo_zip = zipfile.ZipFile(ruta_zip)
+            except zipfile.BadZipFile:
+                print(
+                    f"   Aviso: se omite ZIP ilegible: "
+                    f"{os.path.basename(ruta_zip)}")
+                continue
+            with archivo_zip:
+                for miembro in archivo_zip.infolist():
+                    if miembro.is_dir():
+                        continue
+                    nombre = miembro.filename.replace("\\", "/")
+                    partes = [
+                        parte for parte in nombre.split("/")
+                        if parte not in ("", ".")
+                    ]
+                    if not partes or any(parte == ".." for parte in partes):
+                        continue
+                    es_dicom = (
+                        partes[-1].lower().endswith(
+                            (".dcm", ".dicom", ".ima"))
+                        or "dicom" in {parte.lower() for parte in partes[:-1]}
+                    )
+                    if not es_dicom:
+                        continue
+
+                    # Evita colisiones entre ZIPs que reutilicen el mismo
+                    # nombre de corte.
+                    nombre_zip = os.path.splitext(
+                        os.path.basename(ruta_zip))[0]
+                    destino_relativo = os.path.join(
+                        nombre_zip, *partes)
+                    destino_archivo = os.path.join(destino, destino_relativo)
+                    os.makedirs(os.path.dirname(destino_archivo),
+                                exist_ok=True)
+                    with archivo_zip.open(miembro) as origen, open(
+                            destino_archivo, "wb") as salida:
+                        shutil.copyfileobj(origen, salida)
+                    extraidos += 1
+    except OSError as exc:
+        shutil.rmtree(destino, ignore_errors=True)
+        raise RuntimeError(
+            f"No se pudo leer el archivo DICOM comprimido: {exc}") from exc
+
+    if not extraidos:
+        shutil.rmtree(destino, ignore_errors=True)
+        return None, 0
+    return destino, extraidos
 
 
 def dicom_to_nifti(dicom_dir, output_file="volumen_paciente.nii.gz"):
     print(f"[1/3] Leyendo serie DICOM desde: {dicom_dir}...")
     series_dir, series_id, dicom_names = _find_first_dicom_series(dicom_dir)
-    if not dicom_names:
-        raise RuntimeError(
-            "No se encontr ninguna serie DICOM vlida. "
-            "Verifica que la carpeta contenga archivos DICOM (pueden estar en subcarpetas)."
-        )
+    carpeta_temporal = None
+    try:
+        if not dicom_names:
+            carpeta_temporal, total_extraidos = _extraer_zips_dicom(
+                dicom_dir)
+            if carpeta_temporal:
+                print(
+                    f"   ZIP DICOM detectado: {total_extraidos} archivos "
+                    "extraídos temporalmente")
+                series_dir, series_id, dicom_names = (
+                    _find_first_dicom_series(carpeta_temporal))
 
-    print(f"   Serie detectada en: {series_dir}")
-    print(f"   ID de serie: {series_id}")
-    print(f"   Archivos encontrados: {len(dicom_names)}")
+        if not dicom_names:
+            raise RuntimeError(
+                "No se encontró ninguna serie DICOM válida. "
+                "La carpeta debe contener DICOM sueltos o ZIPs con archivos "
+                "DICOM (.dcm/.dicom/.ima).")
 
-    reader = sitk.ImageSeriesReader()
-    reader.SetFileNames(dicom_names)
-    
-    # Ejecutar la lectura y guardar el volumen
-    image = reader.Execute()
-    sitk.WriteImage(image, output_file)
-    print(f"[+] Volumen NIfTI guardado en: {output_file}")
-    return output_file
+        print(f"   Serie detectada en: {series_dir}")
+        print(f"   ID de serie: {series_id}")
+        print(f"   Archivos encontrados: {len(dicom_names)}")
+
+        reader = sitk.ImageSeriesReader()
+        reader.SetFileNames(dicom_names)
+        image = reader.Execute()
+        os.makedirs(os.path.dirname(os.path.abspath(output_file)),
+                    exist_ok=True)
+        sitk.WriteImage(image, output_file)
+        print(f"[+] Volumen NIfTI guardado en: {output_file}")
+        return output_file
+    finally:
+        if carpeta_temporal:
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
 
 
 def _is_nifti_file(path):
