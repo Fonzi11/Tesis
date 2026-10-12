@@ -29,7 +29,7 @@ traduce eventos de raton y teclado a llamadas sobre ese objeto.
 
 import os
 
-from PySide6.QtCore import Qt, Signal, QRectF, QPointF
+from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QTimer
 from PySide6.QtGui import (
     QPixmap, QImage, QPainter, QPen, QBrush, QColor, QCursor,
 )
@@ -102,6 +102,13 @@ class Viewer2D(QWidget):
         self._delineado_con_lapiz = False
         self._overlay_visible = True
         self._bloqueando_slider = False
+        # El slider puede emitir decenas de valores durante un arrastre.
+        # Solo se procesa el ultimo valor pendiente cada tick de pantalla.
+        self._slider_pendiente = None
+        self._slider_timer = QTimer(self)
+        self._slider_timer.setSingleShot(True)
+        self._slider_timer.setInterval(16)
+        self._slider_timer.timeout.connect(self._aplicar_slider_pendiente)
 
         self._construir_ui()
 
@@ -316,6 +323,8 @@ class Viewer2D(QWidget):
         cargara por su cuenta con otro NIfTI, los dos visores podrian mostrar
         cosas distintas sin avisar.
         """
+        self._slider_timer.stop()
+        self._slider_pendiente = None
         self._volumen = volumen
         self._delineado_con_lapiz = False
         if volumen is None or volumen.vacio:
@@ -513,6 +522,8 @@ class Viewer2D(QWidget):
         """Muestra el plano indicado y ajusta el deslizador a sus cortes."""
         if eje not in self._paginators:
             return
+        self._slider_timer.stop()
+        self._slider_pendiente = None
         self._eje_actual = eje
         for i, (e, _t) in enumerate(self.EJES):
             if e == eje and self._grupo.button(i) is not None:
@@ -550,6 +561,8 @@ class Viewer2D(QWidget):
         nuevo = self._acotar(indice, total)
         if nuevo == self._indice:
             return
+        self._slider_timer.stop()
+        self._slider_pendiente = None
         self._indice = nuevo
         self._refrescar()
         self.corte_cambiado.emit(self._eje_actual)
@@ -566,7 +579,27 @@ class Viewer2D(QWidget):
     def _desde_slider(self, valor):
         if self._bloqueando_slider:
             return
-        self.set_indice(valor)
+        total = self.n_cortes()
+        if total <= 0:
+            return
+        nuevo = self._acotar(valor, total)
+        if nuevo == self._indice and self._slider_pendiente is None:
+            return
+        self._indice = nuevo
+        self._slider_pendiente = nuevo
+        self._lbl_corte.setText(
+            f"Corte {self._indice + 1}/{total}   ·   navegando...")
+        if not self._slider_timer.isActive():
+            self._slider_timer.start()
+
+    def _aplicar_slider_pendiente(self):
+        """Renderiza solo el ultimo corte alcanzado durante el arrastre."""
+        pendiente = self._slider_pendiente
+        self._slider_pendiente = None
+        if pendiente is None:
+            return
+        self._refrescar(ajustar=False)
+        self.corte_cambiado.emit(self._eje_actual)
 
     def ajustar(self):
         """Reajusta el corte al tamano disponible (boton 'Ajustar')."""
@@ -667,6 +700,15 @@ class Viewer2D(QWidget):
             self._lbl_info.setText("")
             return
 
+        self._actualizar_etiqueta_navegacion(emitir=True)
+
+    def _actualizar_etiqueta_navegacion(self, emitir=True):
+        """Actualiza texto sin recalcular el corte ni tocar el slider."""
+        if self._volumen is None or self._volumen.vacio:
+            self._lbl_corte.setText("—")
+            self._lbl_info.setText("")
+            return
+        total = self.n_cortes()
         v = self._volumen
         vox = v.vóxeles_tumor()
         self._lbl_corte.setText(
@@ -675,7 +717,8 @@ class Viewer2D(QWidget):
         self._lbl_info.setText(
             f"ventana {v.ventana()[0]:.0f}–{v.ventana()[1]:.0f}   ·   "
             f"{'máscara sin guardar' if v.mascara_modificada else 'máscara guardada'}")
-        self.informacion.emit(self._lbl_corte.text())
+        if emitir:
+            self.informacion.emit(self._lbl_corte.text())
 
     # ==================================================================
     # EVENTOS DE RATON Y TECLADO
@@ -888,6 +931,8 @@ class _Lienzo(QWidget):
         self._visor = visor
         self._eje = eje
         self._pixmap = QPixmap()
+        self._pixmap_escalado = QPixmap()
+        self._pixmap_escalado_clave = None
         self._escala = 1.0
         self._base = (0.0, 0.0)          # esquina del pixmap dentro del widget
         self._arrastrando = False
@@ -916,6 +961,8 @@ class _Lienzo(QWidget):
 
     def set_pixmap(self, pm):
         self._pixmap = pm if pm is not None else QPixmap()
+        self._pixmap_escalado = QPixmap()
+        self._pixmap_escalado_clave = None
         self.update()
 
     def set_imagen(self, pm):
@@ -933,6 +980,8 @@ class _Lienzo(QWidget):
                   self.height() / max(1, self._pixmap.height()), 1.0)
         self._escala = max(esc, 0.02)
         self._recalcular_base()
+        self._pixmap_escalado = QPixmap()
+        self._pixmap_escalado_clave = None
         self.update()
 
     def zoom(self, evento):
@@ -977,8 +1026,12 @@ class _Lienzo(QWidget):
         w = int(self._pixmap.width() * self._escala) or 1
         h = int(self._pixmap.height() * self._escala) or 1
         x, y = int(self._base[0]), int(self._base[1])
-        p.drawPixmap(x, y, self._pixmap.scaled(
-            w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        clave = (self._pixmap.cacheKey(), w, h)
+        if clave != self._pixmap_escalado_clave:
+            self._pixmap_escalado = self._pixmap.scaled(
+                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self._pixmap_escalado_clave = clave
+        p.drawPixmap(x, y, self._pixmap_escalado)
 
         herramienta = self._visor.herramienta()
         if herramienta in ("pintar", "borrar"):
