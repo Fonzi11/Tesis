@@ -16,6 +16,8 @@ Rutas canonicas (identicas a las de `main.py` y `segmentacion_completa`):
 
 import os
 
+import numpy as np
+
 # src/ui_qt/mesh_store.py -> src/ui_qt -> src -> NEUROHUB -> <raiz>
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
@@ -185,6 +187,69 @@ SUFIJOS_VOLUMEN_BRATS = ("flair", "t1ce", "t2", "t1")
 # Sufijos que SI son máscaras y jamas deben tomarse como imagen de fondo.
 SUFIJOS_MASCARA = ("seg", "mask", "label")
 
+# Raices anatomicas de los NOMBRES de etiqueta (TotalSegmentator y similares).
+# No se listan todas: son casi cien y crecerian con cada modelo. Es una red de
+# seguridad por NOMBRE, para cuando no se puede leer el fichero; la red real es
+# `_parece_imagen`.
+RAICES_ETIQUETA = (
+    "adrenal", "vertebra", "vertebrae", "aorta", "aneurysm", "artery",
+    "vein", "vena", "arteria", "venae", "lung", "liver", "kidney", "spleen",
+    "stomach", "pancreas", "thyroid", "colon", "bladder", "prostate", "uter",
+    "heart", "myocard", "esoph", "trachea", "rib", "sternum", "scapula",
+    "clavicle", "pelvis", "femur", "humer", "tibia", "fibula", "ulna",
+    "radius", "vertebra", "skull", "brain", "cerebell", "brainstem",
+    "eyeball", "optic", "face", "mouth", "tongue", "pharyn", "laryn",
+    "sinus", "ear", "nose", "muscle", "glute", "quadrice", "hamstring",
+    "tendon", "ligament", "cartilage", "bone", "marrow", "hip", "knee",
+    "ankle", "wrist", "hand", "foot", "shoulder", "elbow", "knee",
+)
+
+# Una imagen de RM/CT tiene muchos valores de gris distintos; una etiqueta
+# multi-clase, poquisimas. El corte separates es holgado a proposito: una
+# mascara binaria da 2, y una segmentacion de TotalSegmentator, menos de 100.
+IMAGEN_MIN_VALORES = 48
+
+_cache_gris = {}
+
+
+def _cuantos_valores(ruta):
+    """(ok, n_valores) leyendo la NIfTI. `ok=False` si no se pudo leer."""
+    clave = os.path.normcase(os.path.abspath(ruta))
+    if clave in _cache_gris:
+        return _cache_gris[clave]
+    res = (False, 0)
+    try:
+        import SimpleITK as sitk
+
+        img = sitk.ReadImage(ruta)
+        # Muestreo: no hace falta recorrer el volumen entero para distinguir
+        # una imagen de una etiqueta, y asi el coste no depende del tamano.
+        arr = sitk.GetArrayViewFromImage(img)
+        paso = max(1, int(arr.size ** 0.5) // 512)
+        res = (True, int(np.unique(arr.reshape(-1)[::paso]).size))
+    except Exception:                                       # noqa: BLE001
+        res = (False, 0)
+    _cache_gris[clave] = res
+    return res
+
+
+def _parece_imagen(ruta):
+    """True si `ruta` es una IMAGEN y no una etiqueta.
+
+    El fallo que motiva esto: `vertebrae_T2.nii.gz` cumple el patron BraTS
+    `*_t2.nii.gz`, asi que `listar_volumenes` lo elegia como fondo del visor 2D.
+    El panel se llenaba con una mascara de vertebra en escala de grises y el
+    tumor delineado encima: en pantalla "no se ve nada" que Reconozcas. Se
+    comprueba el CONTENIDO, no el nombre, porque el nombre no basta.
+    """
+    ok, n = _cuantos_valores(ruta)
+    if not ok:
+        # Sin SimpleITK (o con un NIfTI raro) solo se puede mirar el nombre.
+        base = os.path.basename(ruta).lower()
+        return not any(base.startswith(r) or f"_{r}" in base
+                       for r in RAICES_ETIQUETA)
+    return n >= IMAGEN_MIN_VALORES
+
 
 def _es_nombre_volumen(base):
     """True si `base` (nombre en minusculas) parece una IMAGEN, no una máscara.
@@ -199,7 +264,8 @@ def _es_nombre_volumen(base):
     if any(f"_{e}" in base or base.startswith(e)
            for e in ("tumor", "brain", "skull", "neces", "arter", "vena")):
         return False
-    return True
+    return not any(base.startswith(r) or f"_{r}" in base
+                   for r in RAICES_ETIQUETA)
 
 
 def listar_volumenes(*directorios):
@@ -238,14 +304,17 @@ def listar_volumenes(*directorios):
             if f.lower() == nombre.lower():
                 _add(ruta)
     # 2) BraTS multimodal, por sufijo de modalidad (flair tiene prioridad).
+    #    Se comprueba el CONTENIDO: `vertebrae_T2.nii.gz` tambien acaba en
+    #    `_t2.nii.gz` y era una etiqueta, no la imagen del paciente.
     for sufijo in SUFIJOS_VOLUMEN_BRATS:
         for f, ruta in candidatos:
             b = f.lower()
             if b.endswith(f"_{sufijo}.nii.gz") or b == f"{sufijo}.nii.gz":
-                _add(ruta)
+                if _parece_imagen(ruta):
+                    _add(ruta)
     # 3) Cualquier otra imagen que no sea una mascara.
     for f, ruta in candidatos:
-        if _es_nombre_volumen(f.lower()):
+        if _es_nombre_volumen(f.lower()) and _parece_imagen(ruta):
             _add(ruta)
     return out
 

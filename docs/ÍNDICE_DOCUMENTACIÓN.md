@@ -12,6 +12,11 @@ Tu proyecto NEUROHUB ha sido mejorado exitosamente con:
 
 ## 📚 DOCUMENTACIÓN GENERADA
 
+### 0. **FLUJO_NEURONAVEGACION_UNITY_AR.md** ⭐
+   - Diagrama de flujo DICOM/NIfTI → NEUROHUB → Unity → gafas AR
+   - Puntos de validación espacial, calidad, rendimiento y seguridad
+   - Estructura recomendada del paquete de modelos para Unity
+
 ### 1. **RESUMEN_EJECUTIVO.txt** ⭐ LÉEME PRIMERO
    - Resumen ejecutivo de todos los cambios
    - Cómo usar NEUROHUB inmediatamente

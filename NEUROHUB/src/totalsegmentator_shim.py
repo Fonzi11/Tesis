@@ -68,7 +68,7 @@ def _parche_torch_load():
 
 
 def _configurar_hardware_aceleracion():
-    """Detecta GPU (NVIDIA CUDA / AMD Radeon DirectML) y configura hilos de ejecucion."""
+    """Configura CPU y registra el backend real sin confundirlo con CUDA."""
     try:
         import torch
         import builtins
@@ -87,29 +87,28 @@ def _configurar_hardware_aceleracion():
         gpu_nombre = None
         if torch.cuda.is_available():
             gpu_nombre = f"NVIDIA GPU ({torch.cuda.get_device_name(0)})"
-        else:
-            try:
-                import onnxruntime as ort
-                if "DmlExecutionProvider" in ort.get_available_providers():
-                    gpu_nombre = "AMD Radeon RX 9070 XT (Aceleración DirectML/ONNX)"
-            except Exception:
-                pass
 
         # Interceptar el aviso confuso de TotalSegmentator cuando no es GPU CUDA
         orig_print = builtins.print
         def custom_print(*args, **kwargs):
             msg = " ".join(map(str, args))
             if "No GPU detected. Running on CPU" in msg:
-                orig_print(f"[ACELERACIÓN HARDWARE] Procesando con acelerador de alto rendimiento: {gpu_nombre or 'Multihilo (16 núcleos)'}.")
+                orig_print(
+                    "[ACELERACION] TotalSegmentator/nnUNet no tiene backend "
+                    "DirectML; se ejecuta en CPU multihilo."
+                )
                 return
             orig_print(*args, **kwargs)
 
         builtins.print = custom_print
 
         if gpu_nombre:
-            print(f"[ACELERACION GPU] Hardware detectado: {gpu_nombre}")
+            print(f"[ACELERACION CUDA] Hardware detectado: {gpu_nombre}")
         else:
-            print(f"[ACELERACION CPU] Ejecutando paralelismo multihilo optimizado en {num_cpus} núcleos.")
+            print(
+                f"[ACELERACION CPU] TotalSegmentator ejecutará en {num_cpus} "
+                "núcleos; DirectML no es compatible con este modelo nnUNet."
+            )
     except Exception as e:
         print(f"[ACELERACION] Configuración por defecto: {e}")
 

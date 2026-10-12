@@ -246,10 +246,11 @@ class Card(QFrame):
         super().__init__(parent)
         self.setStyleSheet(
             f"QFrame {{ background-color: {COLOR_PANEL_ALT};"
-            f" border: 1px solid {COLOR_BORDE}; border-radius: 6px; }}")
+            f" border: 1px solid {COLOR_BORDE}; border-radius: 9px; }}"
+            f"QFrame:hover {{ border-color: {COLOR_ACENTO}; }}")
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setContentsMargins(12, 9, 12, 9)
         lay.setSpacing(2)
 
         self._titulo = QLabel(titulo)

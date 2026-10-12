@@ -25,7 +25,7 @@ import time
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(BASE_DIR)
 SRC_DIR = os.path.join(BASE_DIR, "src")
-HERRAMIENTAS_DIR = os.path.join(RAIZ, "herramientas")
+HERRAMIENTAS_DIR = os.path.join(BASE_DIR, "herramientas")
 for ruta in (SRC_DIR, HERRAMIENTAS_DIR, RAIZ):
     if ruta not in sys.path:
         sys.path.insert(0, ruta)

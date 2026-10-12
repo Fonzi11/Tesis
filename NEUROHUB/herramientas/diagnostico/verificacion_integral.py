@@ -38,7 +38,8 @@ import sys
 import time
 import traceback
 
-RAIZ = os.path.dirname(os.path.abspath(__file__))
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))))
 # `src.ui_qt` se importa como `src.*` desde NEUROHUB, mientras que el motor de
 # radiomics se importa como `radiomics.*` desde src/. hacen falta las dos raices
 # en el path, y por eso el orden importa: NEUROHUB gana si se inserta despues.
@@ -108,7 +109,8 @@ def _datos_ausentes():
 # =============================================================================
 def etapa_deps(informe):
     """Instalacion: el guion oficial de herramientas/ del proyecto."""
-    script = os.path.join(RAIZ, "herramientas", "verificar_instalacion.py")
+    script = os.path.join(
+        RAIZ, "NEUROHUB", "herramientas", "verificar_instalacion.py")
     if not os.path.exists(script):
         informe.anota("deps", "OMITE", "no existe verificar_instalacion.py", 0.0)
         return
@@ -381,7 +383,9 @@ def etapa_paridad(informe):
     Se delega en `paridad_pyradiomics.py` en vez de duplicar la comparacion:
     ese archivo es la unica fuente de la lista de defectos pendientes.
     """
-    script = os.path.join(RAIZ, "paridad_pyradiomics.py")
+    script = os.path.join(
+        RAIZ, "NEUROHUB", "herramientas", "diagnostico",
+        "paridad_pyradiomics.py")
     if not os.path.exists(script):
         informe.anota("paridad", "OMITE", "no existe paridad_pyradiomics.py", 0.0)
         return

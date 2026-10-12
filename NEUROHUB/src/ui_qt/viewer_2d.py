@@ -49,6 +49,16 @@ from .software_config import (
 COLOR_PINCEL = "#00E66E"
 COLOR_PINCEL_BORRADO = "#FF5C5C"
 
+# Desplazamiento minimo (en pixeles de touchpad) que cuenta como UNA tiqueta de
+# rueda. Por debajo se ignora, para que el temblor del dedo al hacer scroll no
+# haga avanzar el corte de uno en uno.
+UMBRAL_TIQUETA = 40
+
+# Tope de cortes por evento de rueda. Un giro de rueda rapido trae `angleDelta`
+# de +-240 o mas; sin tope se saltarian quince cortes de golpe y el usuario
+# perderia el corte con el tumor. En Slicer pasa igual: el scroll es fino.
+SALTOS_MAXIMOS_POR_RUEDA = 3
+
 
 class Viewer2D(QWidget):
     """Cortes axial/coronal/sagital con overlay y pincel de delineado.
@@ -104,15 +114,16 @@ class Viewer2D(QWidget):
         self._grp_brush.setExclusive(True)
         self._botones_brush = {}
         for clave, texto, tip, color in (
-                ("navegar", "Navegar", "Solo zoom y desplazamiento", COLOR_TEXTO),
-                ("pintar", "Pincel", "Pintar tumor con el boton izquierdo",
+                ("navegar", "  Mano  ", "Zoom (Ctrl+rueda) y arrastre (botón derecho)", COLOR_TEXTO),
+                ("pintar", "  Pincel  ", "Pintar tumor con el botón izquierdo  ·  B",
                  COLOR_PINCEL),
-                ("borrar", "Borrar", "Borrar tumor con el boton izquierdo",
+                ("borrar", "  Borrar  ", "Borrar tumor con el botón izquierdo  ·  E",
                  COLOR_PINCEL_BORRADO)):
             b = QPushButton(texto)
             b.setCheckable(True)
             b.setChecked(clave == "navegar")
             b.setToolTip(tip)
+            b.setCursor(Qt.PointingHandCursor)
             b.setStyleSheet(self._qss_boton(color, clave == "navegar"))
             b.clicked.connect(lambda _c, k=clave: self.set_herramienta(k))
             self._grp_brush.addButton(b)
@@ -143,6 +154,16 @@ class Viewer2D(QWidget):
 
         self._barra_brush.addStretch(1)
 
+        # Siempre activo: es la salida del modo visor-de-PNG, donde no hay
+        # cortes por los que hacer scroll ni mascara que "Limpiar tumor" pueda
+        # vaciar. Sin este boton esos dos controles quedan deshabilitados sin
+        # explicacion visible.
+        self._btn_cargar_volumen = QPushButton("Cargar volumen…")
+        self._btn_cargar_volumen.setToolTip(
+            "Abre una imagen NIfTI para navegar sus cortes y delinear el tumor")
+        self._btn_cargar_volumen.clicked.connect(self.cargar_volumen)
+        self._barra_brush.addWidget(self._btn_cargar_volumen)
+
         self._btn_cargar_mascara = QPushButton("Cargar máscara")
         self._btn_cargar_mascara.setToolTip(
             "Carga una mascara NIfTI delineada (debe compartir la rejilla)")
@@ -155,17 +176,19 @@ class Viewer2D(QWidget):
         self._btn_guardar_mascara.clicked.connect(self.guardar_mascara)
         self._barra_brush.addWidget(self._btn_guardar_mascara)
 
-        self._btn_3d = QPushButton("Generar 3D")
+        self._btn_3d = QPushButton("Segmentar y crear 3D")
         self._btn_3d.setToolTip(
-            "Convierte la mascara delineada en malla STL y actualiza el visor 3D")
+            "Usa el contorno pintado como máscara, la guarda en la rejilla "
+            "del estudio y crea el modelo 3D de alta calidad")
         self._btn_3d.clicked.connect(lambda: self.estado.emit("generar_3d"))
         self._barra_brush.addWidget(self._btn_3d)
 
         self._barra_brush_widget = QWidget()
         self._barra_brush_widget.setLayout(self._barra_brush)
+        self._barra_brush_widget.setObjectName("barraDelineado")
         self._barra_brush_widget.setStyleSheet(
-            f"background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDE};"
-            " border-radius: 4px;")
+            f"#barraDelineado {{ background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDE};"
+            " border-radius: 10px; }")
         return self._barra_brush_widget
 
     @staticmethod
@@ -195,7 +218,7 @@ class Viewer2D(QWidget):
 
         self._slider = QSlider(Qt.Horizontal)
         self._slider.setToolTip(
-            "Corte actual. Rueda: zoom  ·  Ctrl+rueda: cambio de corte")
+            "Corte actual. Rueda: cambiar de corte  ·  Ctrl+rueda: zoom")
         self._slider.valueChanged.connect(self._desde_slider)
         barra.addWidget(self._slider, 1)
 
@@ -322,6 +345,48 @@ class Viewer2D(QWidget):
                 self._png[eje] = path
         self._refrescar()
 
+    def cargar_volumen(self, parent=None):
+        """Abre un selector y carga un NIfTI como volumen navegable.
+
+        Sin esto, un caso en el que el pipeline no dejo copia de la imagen
+        (o que solo trae los tres PNG de cortes) se queda en modo
+        visor-de-PNG: se ve una imagen fija, la rueda no cambia de corte y
+        "Limpiar tumor" esta DESACTIVADO, porque sin volumen no hay ni rejilla
+        ni mascara que vaciar. El usuario lo ve como dos fallos distintos
+        ("el scroll no responde" y "no me limpia el tumor") cuando en realidad
+        falta la imagen.
+        """
+        inicio = os.path.dirname(self._volumen.volumen_path) \
+            if (self._volumen is not None and self._volumen.volumen_path) else ""
+        ruta, _ = QFileDialog.getOpenFileName(
+            parent or self, "Cargar volumen del paciente", inicio,
+            "Volúmenes (*.nii.gz *.nii);;Todos los archivos (*)")
+        if not ruta:
+            return None
+        return self.cargar_volumen_desde(ruta)
+
+    def cargar_volumen_desde(self, ruta, parent=None):
+        """Carga `ruta` como volumen. Devuelve la ruta, o None si falla."""
+        if not ruta or not os.path.isfile(ruta):
+            self.informacion.emit("Ese fichero no existe.")
+            return None
+        from .. import volumen_2d as v2d
+        try:
+            volumen = v2d.Volumen2D(ruta)
+        except Exception as e:
+            self.informacion.emit(f"No se pudo cargar el volumen: {e}")
+            return None
+        if volumen.vacio:
+            self.informacion.emit("El fichero no contiene una imagen legible.")
+            return None
+        self._png = {}
+        self.set_volumen(volumen)
+        self.informacion.emit(
+            f"Volumen cargado: {os.path.basename(ruta)}  ·  "
+            f"{volumen.n_cortes(self._eje_actual)} cortes  ·  "
+            "Pinte el tumor y pulse «Segmentar y crear 3D»")
+        return ruta
+
     def cargar_mascara(self, parent=None):
         """Abre un selector y carga la mascara elegida sobre el volumen actual."""
         if self._volumen is None or self._volumen.vacio:
@@ -395,6 +460,18 @@ class Viewer2D(QWidget):
 
     def _cambio_radio(self, _index):
         self._radio_voxel = int(self._cmb_radio.currentData() or 3)
+        for w in self._paginators.values():
+            w.update()
+
+    def _cambiar_radio(self, delta):
+        """Cambia el radio al vecino de la lista (atajos [ ] o + -)."""
+        radios = list(self.RADIOS_VOXEL)
+        try:
+            i = radios.index(self._radio_voxel)
+        except ValueError:
+            i = 2
+        i = max(0, min(len(radios) - 1, i + int(delta)))
+        self._cmb_radio.setCurrentIndex(i)
 
     def herramienta(self):
         return self._herramienta
@@ -494,10 +571,16 @@ class Viewer2D(QWidget):
         self._paginators[self._eje_actual].ajustar()
         self.corte_cambiado.emit(self._eje_actual)
 
-    def _refrescar(self):
-        """Redibuja el corte actual y actualiza toda la informacion visible."""
-        self._actualizar_visibilidad()
-        self._actualizar_navegacion()
+    def _refrescar(self, ajustar=True, solo_imagen=False):
+        """Redibuja el corte actual. `ajustar=False` conserva zoom y pan.
+
+        Al pintar, recentrar el corte en cada muestra del raton hacia que el
+        pincel "saltara" y el usuario perdiera el encuadre. El overlay se
+        actualiza; la vista no.
+        """
+        if not solo_imagen:
+            self._actualizar_visibilidad()
+            self._actualizar_navegacion()
         w = self._paginators[self._eje_actual]
         if self._volumen is not None and not self._volumen.vacio:
             w.set_imagen(self._render_actual())
@@ -505,7 +588,8 @@ class Viewer2D(QWidget):
             w.set_pixmap(QPixmap(self._png[self._eje_actual]))
         else:
             w.set_pixmap(None)
-        w.ajustar()
+        if ajustar:
+            w.ajustar()
 
     def _render_actual(self):
         """Renderiza el corte actual con overlay y devuelve un QPixmap."""
@@ -594,22 +678,22 @@ class Viewer2D(QWidget):
         """Delegado por el lienzo. Empieza a pintar si la herramienta lo pide."""
         if self._herramienta == "navegar":
             return False
-        p0 = widget.voxel_continuo(evento.pos())
+        p0 = widget.voxel_continuo(_pos_evento(evento), acoplar=True)
         if p0 is None:
             return False
         self._pintando = True
         self._ultimo_voxel = p0
         self._indice_pintando = self._indice
         self._eje_pintando = self._eje_actual
-        # El primer clic se pinta como un punto, sin segmento: `pintar_tramo_2d`
-        # entre el mismo punto dos veces no aportaria nada.
+        if self._volumen is not None and not self._volumen.vacio:
+            self._volumen.iniciar_trazo(self._eje_pintando, self._indice_pintando)
         self._pintar_punto(p0, widget)
         return True
 
     def mouse_move(self, evento, widget):
         """Delegado por el lienzo. Continua el trazo y el desplazamiento."""
         if self._pintando and self._herramienta != "navegar":
-            p1 = widget.voxel_continuo(evento.pos())
+            p1 = widget.voxel_continuo(_pos_evento(evento), acoplar=True)
             if p1 is not None:
                 # Si el corte o el eje han cambiado a mitad de trazo (no deberia
                 # pasar, pero con Ctrl+rueda durante el arrastre sí), se cierra
@@ -617,6 +701,8 @@ class Viewer2D(QWidget):
                 # misma mascara daria un tumor con forma de escalera.
                 if (self._indice_pintando != self._indice
                         or self._eje_pintando != self._eje_actual):
+                    if self._volumen is not None and not self._volumen.vacio:
+                        self._volumen.cerrar_trazo()
                     self._pintando = False
                     self._ultimo_voxel = None
                     return True
@@ -632,20 +718,33 @@ class Viewer2D(QWidget):
             self._ultimo_voxel = None
             self._indice_pintando = None
             self._eje_pintando = None
-            # El desplazamiento del texto se actualiza al SOLTAR: si se
-            # actualizara en cada pixel, repintar la imagen entera 20 veces por
-            # segundo congelaria la interfaz.
+            if self._volumen is not None and not self._volumen.vacio:
+                self._volumen.cerrar_trazo()
             self._actualizar_navegacion()
             return True
         return False
 
     def rueda(self, evento, widget):
-        """Rueda = zoom; con Ctrl o Shift = cambio de corte."""
+        """Rueda = cambio de corte; con Ctrl o Shift = zoom.
+
+        Es el reparto de 3D Slicer, y es el que espera el usuario: en un visor
+        medico la rueda principal recorre los cortes, porque es la accion que
+        se repite docenas de veces. El zoom, que se ajusta una vez y luego se
+        deja, pasa a Ctrl (ademas de Shift, para quien venga de otros visores).
+
+        Antes la rueda sola hacia zoom y el cambio de corte exigia Ctrl: en un
+        visor de cortes eso es al reves, y el usuario reportaba que el scroll de
+        profundidad "no respondia" (en realidad hacia zoom).
+        """
         if evento.modifiers() & (Qt.ControlModifier | Qt.ShiftModifier):
-            delta = 1 if evento.angleDelta().y() > 0 else -1
-            self.avanzar(delta)
+            return widget.zoom(evento)
+        pasos = _pasos_de_rueda(evento)
+        if pasos:
+            self.avanzar(pasos)
             return True
-        return widget.zoom(evento)
+        # Una rueda tactil puede llegar sin desplazamiento util: se ignora en
+        # vez de dejar el corte donde estaba.
+        return False
 
     def _pintar_punto(self, uv, widget):
         """Pinta un punto (un solo pincel) en la posicion de voxel dada."""
@@ -668,10 +767,11 @@ class Viewer2D(QWidget):
             self._eje_pintando or self._eje_actual,
             self._indice_pintando if self._indice_pintando is not None
             else self._indice,
-            uv0, uv1, kx, ky, radio=self._radio_voxel, valor=valor)
+            uv0, uv1, kx, ky, radio=self._radio_voxel, valor=valor,
+            registrar_historial=False)
         if n:
             self.mascara_modificada.emit()
-        self._refrescar()
+        self._refrescar(ajustar=False, solo_imagen=True)
 
     def keyPressEvent(self, event):
         """Atajos de teclado del visor."""
@@ -700,6 +800,10 @@ class Viewer2D(QWidget):
             self.set_herramienta("pintar")
         elif tecla == Qt.Key_E:
             self.set_herramienta("borrar")
+        elif tecla in (Qt.Key_BracketLeft, Qt.Key_Minus):
+            self._cambiar_radio(-1)
+        elif tecla in (Qt.Key_BracketRight, Qt.Key_Plus, Qt.Key_Equal):
+            self._cambiar_radio(1)
         elif tecla == Qt.Key_Escape:
             self.set_herramienta("navegar")
         else:
@@ -708,12 +812,23 @@ class Viewer2D(QWidget):
         event.accept()
 
     def wheelEvent(self, event):
-        """Rueda sobre la barra o el panel: tambien cambia de corte."""
+        """Rueda sobre las barras: mismo reparto que sobre el lienzo."""
         if event.modifiers() & (Qt.ControlModifier | Qt.ShiftModifier):
-            self.avanzar(1 if event.angleDelta().y() > 0 else -1)
+            return self._zoom_actual(event)
+        pasos = _pasos_de_rueda(event)
+        if pasos:
+            self.avanzar(pasos)
             event.accept()
             return
-        super().wheelEvent(event)
+        event.ignore()
+
+    def _zoom_actual(self, event):
+        """Zoom del lienzo visible, para la rueda sobre las barras."""
+        w = self._paginators.get(self._eje_actual)
+        if w is not None and w.zoom(event):
+            event.accept()
+            return
+        event.ignore()
 
     # ==================================================================
     # API PUBLICA QUE USA LA VENTANA PRINCIPAL
@@ -819,7 +934,13 @@ class _Lienzo(QWidget):
             return False
         delta = evento.angleDelta().y()
         if delta == 0:
-            return False
+            # Los portatiles con touchpad mandan `pixelDelta` y pueden dejar
+            # `angleDelta` a 0: sin esto, Ctrl+rueda no hacia nada en un equipo
+            # con pantalla tactil.
+            if evento.hasPixelDelta() and evento.pixelDelta().y() != 0:
+                delta = evento.pixelDelta().y()
+            else:
+                return False
         self._escala = min(max(self._escala * (1.15 if delta > 0 else 1 / 1.15),
                                0.05), 16.0)
         self._recalcular_base()
@@ -906,7 +1027,7 @@ class _Lienzo(QWidget):
         uv = self.voxel_continuo(pos)
         return None if uv is None else (int(round(uv[0])), int(round(uv[1])))
 
-    def voxel_continuo(self, pos):
+    def voxel_continuo(self, pos, acoplar=False):
         """(x, y) en voxeles SIN redondear, o None fuera de la imagen.
 
         Ojo con las unidades, que es donde se escondia el desplazamiento:
@@ -919,6 +1040,9 @@ class _Lienzo(QWidget):
         Sin redondear a proposito: al pintar un trazo largo, redondear en cada
         pixel dejaria huecos entre dos puntos consecutivos cuando el raton se
         mueve mas rapido que el refresco de la pantalla.
+
+        `acoplar=True` recorta al borde del corte (durante un arrastre) para
+        que el pincel no se apague al rozar el margen.
         """
         if self._pixmap.isNull() or self._pixmap.width() == 0:
             return None
@@ -929,7 +1053,10 @@ class _Lienzo(QWidget):
         u = (pos.x() - self._base[0]) / px
         v = (pos.y() - self._base[1]) / py
         if not (0.0 <= u <= 1.0 and 0.0 <= v <= 1.0):
-            return None
+            if not acoplar:
+                return None
+            u = min(max(u, 0.0), 1.0)
+            v = min(max(v, 0.0), 1.0)
         kx, ky = self._visor.escala_voxel_por_eje(self._eje)
         return (u * self._pixmap.width() / max(kx, 1e-6),
                 v * self._pixmap.height() / max(ky, 1e-6))
@@ -941,9 +1068,9 @@ class _Lienzo(QWidget):
         """Derecho y central desplazan; izquierdo delega en el visor."""
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._arrastrando = True
-            self._origen = event.position().toPoint()
-            self.setCursor(Qt.ClosedHandCursor if event.button() == Qt.RightButton
-                           else Qt.ClosedHandCursor)
+            pos = _pos_evento(event)
+            self._origen = QPointF(pos.x(), pos.y())
+            self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
         if event.button() == Qt.LeftButton and self._visor.mouse_press(event, self):
@@ -954,7 +1081,8 @@ class _Lienzo(QWidget):
     def mouseMoveEvent(self, event):
         """Desplaza si se arrastra; si no, delega el trazo del pincel."""
         if self._arrastrando and self._origen is not None:
-            p = event.position().toPoint()
+            pos = _pos_evento(event)
+            p = QPointF(pos.x(), pos.y())
             d = p - self._origen
             self._origen = p
             self._base = (self._base[0] + d.x(), self._base[1] + d.y())
@@ -985,6 +1113,49 @@ class _Lienzo(QWidget):
             event.accept()
             return
         event.ignore()
+
+
+def _pasos_de_rueda(evento):
+    """Cuantos cortes recorre la rueda: +1 hacia abajo, -1 hacia arriba.
+
+    Se normalizan las tres formas en que llega el desplazamiento:
+
+    * `angleDelta`: el raton de rueda, en octavos de grado (normalmente +-120).
+    * `pixelDelta`: el touchpad, en pixeles. Puede traer valores pequenos como
+      15 o 40; si se usara tal cual, un solo gesto saltaria veinte cortes.
+    * `inverted`: el Natural Scrolling de Windows/macOS ya invierte el signo y
+      avisa con `evento.inverted()`. Si tambien se invirtiera aqui, la rueda
+      bajaria al subir y el usuario lo percibe como que "no responde".
+
+    Devuelve 0 si no hay desplazamiento reconocible.
+    """
+    ang = evento.angleDelta().y()
+    pix = evento.pixelDelta().y() if evento.hasPixelDelta() else 0
+
+    # El touchpad manda pixeles; el raton, grados. Se elige la magnitud mayor
+    # y se normaliza a "tiquetas" con `UMBRAL_TIQUETA`.
+    if abs(ang) >= 8 and (abs(ang) > abs(pix) or pix == 0):
+        magnitud = abs(ang) / 120.0
+    elif pix != 0:
+        magnitud = abs(pix) / UMBRAL_TIQUETA
+    else:
+        return 0
+
+    pasos = int(round(magnitud))
+    if pasos <= 0:
+        return 0
+    pasos = min(pasos, SALTOS_MAXIMOS_POR_RUEDA)
+    return -pasos if (ang < 0 or pix < 0) else pasos
+
+
+def _pos_evento(evento):
+    """Posicion del puntero en coordenadas del widget (subpixel si existe)."""
+    if hasattr(evento, "position"):
+        try:
+            return evento.position()
+        except Exception:
+            pass
+    return evento.pos()
 
 
 def _qcolor(hex_color):

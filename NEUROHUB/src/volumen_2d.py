@@ -97,6 +97,9 @@ class Volumen2D:
         # sola al superar CACHE_BASE_MAX, y de forma explicita cuando cambia
         # el volumen o la ventana.
         self._cache_base = {}
+        # Trazo en curso: un arrastre entero = un paso de deshacer.
+        self._trazo_sectores = None
+        self._trazo_antes = None
 
         if volumen is not None:
             self.volumen = np.asarray(volumen, dtype=np.float32)
@@ -335,10 +338,14 @@ class Volumen2D:
         rgb = np.dstack([self._reescalar(gris, w, h, orden=1) * 255.0] * 3)
 
         self._cache_base[clave] = rgb
-        # Solo unos pocos cortes: al pintar, la cache se vacia sola hacia el
-        # corte siguiente sin llegar a unos miles de imagenes de 3 MB.
-        if len(self._cache_base) > CACHE_BASE_MAX:
-            self._cache_base.clear()
+        # LRU: si se vaciara toda la cache al superar el tope, el corte que
+        # se acaba de pintar (el que mas se usa) se perderia y cada movimiento
+        # del pincel volveria a pagar CLAHE + unsharp.
+        while len(self._cache_base) > CACHE_BASE_MAX:
+            mas_antigua = next(iter(self._cache_base))
+            if mas_antigua == clave:
+                break
+            del self._cache_base[mas_antigua]
         return rgb
 
     def invalidar_cache(self):
@@ -570,8 +577,29 @@ class Volumen2D:
                                  y0 + (y1 - y0) * t, radio, valor)
         return total
 
+    def iniciar_trazo(self, eje, indice):
+        """Congela el corte actual para agrupar un arrastre en un solo deshacer."""
+        self._trazo_sectores = self._sectores(eje, indice)
+        self._trazo_antes = self.corte_mascara(eje, indice).copy()
+
+    def cerrar_trazo(self):
+        """Registra el arrastre completo. Devuelve voxels cambiados, o 0."""
+        if self._trazo_antes is None or self._trazo_sectores is None:
+            return 0
+        despues = (self.mascara[self._trazo_sectores] > 0)
+        antes = self._trazo_antes
+        sectores = self._trazo_sectores
+        self._trazo_antes = None
+        self._trazo_sectores = None
+        if np.array_equal(antes, despues):
+            return 0
+        self.mascara_modificada = True
+        self._historial.append((sectores, antes, despues.copy()))
+        del self._historial[:-HISTORIAL_MAX]
+        return int((despues & ~antes).sum() + (antes & ~despues).sum())
+
     def pintar_tramo_2d(self, eje, indice, p0, p1, kx=None, ky=None,
-                        radio=3, valor=1):
+                        radio=3, valor=1, registrar_historial=True):
         """Pinta un SEGMENTO de (x0,y0) a (x1,y1) rellenando el hueco.
 
         Tres decisiones, todas visibles al delinear a mano:
@@ -610,12 +638,13 @@ class Volumen2D:
         if np.array_equal(antes, despues):
             return 0
         self.mascara_modificada = True
-        # Un solo paso de deshacer por trazo completo, no uno por muestra del
-        # raton: deshuchar evento a evento haria falta pulsar Ctrl+Z cientos de
-        # veces para corregir un solo contorno.
-        self._historial.append(
-            (self._sectores(eje, indice), antes, despues.copy()))
-        del self._historial[:-HISTORIAL_MAX]
+        # Con `registrar_historial=False` el visor agrupa un arrastre entero
+        # (iniciar_trazo / cerrar_trazo). Si se registrara aqui, Ctrl+Z
+        # desharia cada muestra del raton.
+        if registrar_historial:
+            self._historial.append(
+                (self._sectores(eje, indice), antes, despues.copy()))
+            del self._historial[:-HISTORIAL_MAX]
         return int((despues & ~antes).sum() if valor
                    else (antes & ~despues).sum())
 

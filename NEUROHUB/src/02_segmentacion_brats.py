@@ -4,21 +4,20 @@ Segmentación de tumores cerebrales con BRATS (BraTS 2020) via MONAI.
 Este módulo integra el modelo preentrenado BRATS 2020 de MONAI para
 segmentación precisa de tumores cerebrales (ET - enhancing tumor,
 WT - whole tumor, TC - tumor core) en imágenes de resonancia magnética
-multimodal (T1, T1ce, T2, FLAIR).
+multimodal (T1ce, T1, T2, FLAIR).
 
 El modelo BRATS es el estándar de oro en segmentación de gliomas y
 proporciona una precisión mucho mayor que los métodos heurísticos
 de umbralización.
 
 ARQUITECTURA DEL MODELO (SegResNet):
-- in_channels: 4 (T1, T1ce, T2, FLAIR)
-- out_channels: 3 (ET, NCR, ED)
+- in_channels: 4 (T1ce, T1, T2, FLAIR)
+- out_channels: 3 (TC, WT, ET)
 - ROI: [240, 240, 160]
 - Post-procesamiento: sigmoid + umbral 0.5
 - Mapeo de etiquetas:
-  - Canal 0 (NCR) > 0.5 → etiqueta 1 (necrosis)
-  - Canal 1 (ED) > 0.5 → etiqueta 2 (edema)
-  - Canal 2 (ET) > 0.5 → etiqueta 4 (tumor realzado)
+  - Canal 0 (TC) y canal 2 (ET) → NCR/ET
+  - Canal 1 (WT) fuera de TC → etiqueta 2 (edema)
 """
 
 import os
@@ -28,6 +27,11 @@ import numpy as np
 import SimpleITK as sitk
 import torch
 from pathlib import Path
+
+try:
+    from hardware_backend import describe_backends
+except ImportError:
+    from src.hardware_backend import describe_backends
 
 # =============================================================================
 # CONFIGURACIÓN DE BRATS
@@ -47,6 +51,14 @@ BRATS_LABELS = {
     1: "Necrosis (NCR)",
     2: "Edema peritumoral (ED)",
     4: "Tumor realzado (ET)",
+}
+
+# El bundle declara este orden exacto de entrada y no el orden alfabético.
+BRATS_INPUT_CHANNELS = ("t1ce", "t1", "t2", "flair")
+BRATS_OUTPUT_CHANNELS = {
+    "tumor_core": 0,
+    "tumor_whole": 1,
+    "tumor_enhancing": 2,
 }
 
 # Mapeo a máscaras clínicas
@@ -143,7 +155,7 @@ def load_brats_model(bundle_dir=None):
     if not os.path.exists(model_path):
         print(f"[BRATS] Modelo no encontrado en: {model_path}")
         return None, None
-    
+
     try:
         from monai.networks.nets import SegResNet
         
@@ -158,8 +170,17 @@ def load_brats_model(bundle_dir=None):
         )
         
         # Cargar los pesos
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[BRATS] Cargando modelo en dispositivo: {device}")
+        cuda_enabled = os.environ.get("NEUROHUB_ENABLE_CUDA") == "1"
+        device = torch.device(
+            "cuda" if cuda_enabled and torch.cuda.is_available() else "cpu"
+        )
+        print(f"[BRATS] Cargando modelo PyTorch en dispositivo: {device}")
+        if device.type == "cpu":
+            print(
+                "[BRATS] Backend disponible para modelos ONNX: "
+                f"{describe_backends()}. Este bundle PyTorch aún no se ejecuta "
+                "en DirectML sin una exportación ONNX validada."
+            )
         
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         
@@ -175,8 +196,8 @@ def load_brats_model(bundle_dir=None):
         else:
             state_dict = checkpoint
         
-        # Cargar los pesos en el modelo
-        model.load_state_dict(state_dict, strict=False)
+        # Una carga parcial produciría una máscara con calidad desconocida.
+        model.load_state_dict(state_dict, strict=True)
         model.eval()
         model.to(device)
         
@@ -190,16 +211,64 @@ def load_brats_model(bundle_dir=None):
         return None, None
 
 
+def _load_brats_onnx_session(bundle_dir):
+    """Carga la exportación ONNX y confirma que DirectML está disponible."""
+    onnx_path = os.path.join(bundle_dir, "models", "model.onnx")
+    if not os.path.exists(onnx_path):
+        return None
+    try:
+        import onnxruntime as ort
+        from hardware_backend import preferred_onnx_providers
+        providers = preferred_onnx_providers()
+        if providers[0] != "DmlExecutionProvider":
+            print("[BRATS-ONNX] DirectML no está disponible; no se usará ONNX.")
+            return None
+        session = ort.InferenceSession(onnx_path, providers=providers)
+        if "DmlExecutionProvider" not in session.get_providers():
+            raise RuntimeError(
+                f"ONNX Runtime no activó DirectML: {session.get_providers()}"
+            )
+        print(
+            "[BRATS-ONNX] AMD activa mediante DirectML: "
+            f"{session.get_providers()}"
+        )
+        return session
+    except Exception as exc:
+        print(f"[BRATS-ONNX] No se pudo cargar el modelo ONNX: {exc}")
+        return None
+
+
+def _run_onnx_sliding_window(session, input_tensor):
+    """Ejecuta las ventanas MONAI mediante el proveedor DirectML."""
+    from monai.inferers import SlidingWindowInferer
+
+    def predictor(window):
+        output = session.run(
+            ["pred"],
+            {"image": window.detach().cpu().numpy().astype(np.float32)},
+        )[0]
+        return torch.from_numpy(output)
+
+    inferer = SlidingWindowInferer(
+        roi_size=(240, 240, 160),
+        sw_batch_size=1,
+        overlap=0.5,
+        mode="gaussian",
+    )
+    return inferer(input_tensor.cpu(), predictor)
+
+
 def _preprocess_volume(volume_4ch, roi_size=(240, 240, 160)):
     """
     Preprocesa el volumen de 4 canales para el modelo BRATS.
     
     Args:
         volume_4ch: Array numpy de forma [4, D, H, W]
-        roi_size: Tamaño del ROI esperado por el modelo
+        roi_size: Tamaño del ROI esperado por el modelo (solo informativo;
+            la inferencia usa SlidingWindowInferer que maneja cualquier tamaño)
     
     Returns:
-        Array preprocesado de forma [1, 4, D', H', W']
+        Tensor preprocesado de forma [1, 4, D, H, W]
     """
     from monai.transforms import NormalizeIntensity
     
@@ -209,40 +278,24 @@ def _preprocess_volume(volume_4ch, roi_size=(240, 240, 160)):
     # Convertir a tensor
     tensor = torch.from_numpy(volume_4ch).float()
     
-    # Normalizar
-    tensor = normalizer(tensor.unsqueeze(0))
+    # Normalizar (añade dim de batch para la transform y la quita después)
+    tensor = normalizer(tensor)
     
-    # Padear al tamaño del ROI si es necesario
-    target_shape = roi_size
-    current_shape = tensor.shape[2:]
-    
-    # Calcular padding
-    pad_d = max(0, target_shape[0] - current_shape[0])
-    pad_h = max(0, target_shape[1] - current_shape[1])
-    pad_w = max(0, target_shape[2] - current_shape[2])
-    
-    if pad_d > 0 or pad_h > 0 or pad_w > 0:
-        padder = torch.nn.ConstantPad3d(
-            (0, pad_w, 0, pad_h, 0, pad_d), 0
-        )
-        tensor = padder(tensor)
-    
-    return tensor
+    # Añadir dimensión de batch: [1, 4, D, H, W]
+    return tensor.unsqueeze(0)
 
 
 def _postprocess_output(output, original_shape):
     """
     Post-procesa la salida del modelo BRATS.
     
-    El modelo produce 3 canales de salida (sigmoid):
-    - Canal 0: NCR (necrosis)
-    - Canal 1: ED (edema)
+    El bundle produce 3 canales independientes (sigmoid):
+    - Canal 0: TC (tumor core)
+    - Canal 1: WT (whole tumor)
     - Canal 2: ET (tumor realzado)
-    
-    El mapeo a etiquetas es:
-    - ET > 0.5 → etiqueta 4
-    - NCR > 0.5 → etiqueta 1
-    - ED > 0.5 → etiqueta 2
+
+    Se convierten a etiquetas clínicas: ET -> 4, TC sin ET -> NCR (1) y
+    WT fuera de TC -> edema (2).
     
     Args:
         output: Tensor de salida del modelo [1, 3, D, H, W]
@@ -263,15 +316,12 @@ def _postprocess_output(output, original_shape):
     # Aplicar umbral 0.5
     output = (output > 0.5).astype(np.uint8)
     
-    # Mapear a etiquetas segun el post-procesamiento OFICIAL del bundle (inference.json):
-    #   torch.where(x[[2]]>0, 4, torch.where(x[[0]]>0, 1, torch.where(x[[1]]>0, 2, 0)))
-    # La PRIORIDAD es: ET(4) > NCR(1) > ED(2).
-    #
-    # (Se corrigio un bug del orden anterior: se asignaba ET primero y luego
-    #  la sobrescribian NCR y ED, anulando la mascara de tumor realzado ET).
-    et = output[2] > 0
-    ncr = output[0] > 0
-    ed = output[1] > 0
+    # TC incluye NCR+ET y WT incluye NCR+ED+ET.
+    tumor_core = output[BRATS_OUTPUT_CHANNELS["tumor_core"]] > 0
+    tumor_whole = output[BRATS_OUTPUT_CHANNELS["tumor_whole"]] > 0
+    et = output[BRATS_OUTPUT_CHANNELS["tumor_enhancing"]] > 0
+    ncr = tumor_core & ~et
+    ed = tumor_whole & ~tumor_core
 
     seg = np.zeros(output.shape[1:], dtype=np.uint8)
     # ET (etiqueta 4): prioridad maxima
@@ -294,9 +344,9 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
     """
     Segmenta tumores cerebrales usando el modelo BRATS 2020.
     
-    Requiere 4 modalidades de MRI alineadas (T1, T1ce, T2, FLAIR).
-    Si alguna modalidad no está disponible, se puede usar la misma imagen
-    para los canales faltantes (con menor precisión).
+    Requiere 4 modalidades de MRI alineadas (T1ce, T1, T2, FLAIR).
+    Las cuatro modalidades reales son obligatorias. Duplicar una modalidad
+    destruye el contraste diferencial que separa TC, WT y ET.
     
     Args:
         mri_t1_path: Ruta al volumen T1 (NIfTI)
@@ -333,12 +383,15 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
         else:
             print(f"[BRATS] Modalidad {name.upper()}: NO DISPONIBLE")
     
-    if not available:
-        print("[BRATS] No hay modalidades de MRI disponibles. Abortando.")
+    if set(available) != set(BRATS_INPUT_CHANNELS):
+        faltantes = [name.upper() for name in BRATS_INPUT_CHANNELS
+                     if name not in available]
+        print("[BRATS] Faltan modalidades obligatorias: "
+              f"{', '.join(faltantes)}. Abortando.")
         return None
     
 
-    # === GUARDIA DE MODALIDAD ÚNICA ===
+    # === GUARDIA DE ARCHIVOS DUPLICADOS ===
     # El modelo BRATS se entrena con 4 modalidades MRI REALES y alineadas
     # (T1ce, T1, T2, FLAIR) y distingue las subregiones por el CONTRASTE
     # DIFERENCIAL entre ellas (p. ej. el tumor realzado ET es hiperintenso en
@@ -348,15 +401,12 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
     # produce una segmentación catastrófica (marca casi todo el cerebro como
     # tumor/edema).
     #
-    # Por eso, si tan solo hay UNA modalidad real distinta, NO ejecutamos
-    # BRATS y dejamos que el pipeline aplique el método morfológico heurístico.
     unique_paths = set()
     for p in available.values():
         unique_paths.add(os.path.abspath(p))
-    if len(unique_paths) < 2:
-        print("[BRATS] Solo hay una modalidad MRI distinta (o se duplicó el mismo "
-              "volumen en los 4 canales). BRATS exige múltiples modalidades reales "
-              "(T1ce, T1, T2, FLAIR) para distinguir correctamente las subregiones.")
+    if len(unique_paths) != 4:
+        print("[BRATS] Las cuatro modalidades deben ser archivos distintos y "
+              "reales; se usará el método heurístico.")
         print("[BRATS] Se usará el método heurístico morfológico en su lugar.")
         return None
 
@@ -366,11 +416,15 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
         print("[BRATS] No se pudo obtener el modelo BRATS. Se usará el método heurístico.")
         return None
     
-    # Cargar el modelo
-    model, device = load_brats_model(bundle_dir)
-    if model is None:
-        print("[BRATS] No se pudo cargar el modelo BRATS. Se usará el método heurístico.")
-        return None
+    # Preferir ONNX/DirectML cuando la exportación ya fue validada.
+    onnx_session = _load_brats_onnx_session(bundle_dir)
+    model = None
+    device = torch.device("cpu")
+    if onnx_session is None:
+        model, device = load_brats_model(bundle_dir)
+        if model is None:
+            print("[BRATS] No se pudo cargar el modelo BRATS. Se usará el método heurístico.")
+            return None
     
     os.makedirs(output_dir, exist_ok=True)
     
@@ -381,35 +435,53 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
             img = sitk.ReadImage(path)
             images[name] = sitk.GetArrayFromImage(img).astype(np.float32)
         
-        # Si faltan modalidades, usar la primera disponible como relleno
-        first_available = list(images.keys())[0]
-        reference_img = sitk.ReadImage(available[first_available])
-        original_shape = images[first_available].shape
+        reference_img = sitk.ReadImage(available["t1ce"])
+        original_shape = images["t1ce"].shape
         
         # Construir el volumen de 4 canales
-        # BRATS espera: [C=4, D, H, W] con canales [T1, T1ce, T2, FLAIR]
+        # El bundle espera [T1ce, T1, T2, FLAIR].
         volume_4ch = np.zeros((4, *original_shape), dtype=np.float32)
-        
-        channel_map = {"t1": 0, "t1ce": 1, "t2": 2, "flair": 3}
-        for name, arr in images.items():
-            volume_4ch[channel_map[name]] = arr
-        
-        # Rellenar canales faltantes con la primera modalidad disponible
-        for ch in range(4):
-            if np.max(volume_4ch[ch]) == 0:
-                volume_4ch[ch] = images[first_available]
+        for ch, name in enumerate(BRATS_INPUT_CHANNELS):
+            current = sitk.ReadImage(available[name])
+            if (current.GetSize() != reference_img.GetSize()
+                    or not np.allclose(current.GetSpacing(),
+                                       reference_img.GetSpacing(),
+                                       rtol=0, atol=1e-4)
+                    or not np.allclose(current.GetOrigin(),
+                                       reference_img.GetOrigin(),
+                                       rtol=0, atol=1e-4)
+                    or current.GetDirection() != reference_img.GetDirection()):
+                print(f"[BRATS] {name.upper()} no comparte la rejilla espacial "
+                      "de T1CE; se aborta para no desalinear la máscara.")
+                return None
+            volume_4ch[ch] = images[name]
         
         # Preprocesar el volumen
         print("[BRATS] Preprocesando volumen...")
         input_tensor = _preprocess_volume(volume_4ch)
         input_tensor = input_tensor.to(device)
         
-        # Ejecutar inferencia
-        print("[BRATS] Ejecutando inferencia del modelo...")
-        print(f"[BRATS] Dispositivo: {device}")
-        
-        with torch.no_grad():
-            output = model(input_tensor)
+        # Ejecutar inferencia con SlidingWindowInferer para manejar cualquier
+        # tamaño de volumen (el modelo SegResNet fue entrenado con ROI 240x240x160
+        # pero puede inferirse en volúmenes mas grandes con ventana deslizante).
+        print("[BRATS] Ejecutando inferencia del modelo (SlidingWindowInferer)...")
+        print(
+            f"[BRATS] Dispositivo: "
+            f"{'AMD Radeon / DirectML' if onnx_session is not None else device}"
+        )
+
+        if onnx_session is not None:
+            output = _run_onnx_sliding_window(onnx_session, input_tensor)
+        else:
+            from monai.inferers import SlidingWindowInferer
+            inferer = SlidingWindowInferer(
+                roi_size=(240, 240, 160),
+                sw_batch_size=1,
+                overlap=0.5,
+                mode="gaussian",
+            )
+            with torch.no_grad():
+                output = inferer(input_tensor, model)
         
         # Post-procesar la salida
         print("[BRATS] Post-procesando segmentación...")
@@ -461,11 +533,8 @@ def segment_brats_tumor(mri_t1_path, mri_t1ce_path, mri_t2_path, mri_flair_path,
 
 def segment_tumor_brats_from_single_volume(nifti_path, output_dir="segmentaciones_brats"):
     """
-    Segmenta tumor usando BRATS con un solo volumen (duplicando canales).
-    
-    Esto es un fallback cuando solo se tiene una modalidad. La precisión
-    será menor que con las 4 modalidades, pero mejor que los métodos
-    heurísticos puros.
+    Mantiene compatibilidad con el antiguo punto de entrada, pero no ejecuta
+    BraTS con una sola modalidad: duplicar canales no es una inferencia válida.
     
     Args:
         nifti_path: Ruta al volumen NIfTI (cualquier modalidad)
@@ -474,17 +543,9 @@ def segment_tumor_brats_from_single_volume(nifti_path, output_dir="segmentacione
     Returns:
         dict: Resultados de segmentación o None.
     """
-    print("\n[BRATS] Usando modo de modalidad única (duplicando canales)...")
-    print("[BRATS] ADVERTENCIA: La precisión es menor sin las 4 modalidades de MRI.")
-    
-    # Usar el mismo volumen para las 4 modalidades
-    return segment_brats_tumor(
-        mri_t1_path=nifti_path,
-        mri_t1ce_path=nifti_path,
-        mri_t2_path=nifti_path,
-        mri_flair_path=nifti_path,
-        output_dir=output_dir,
-    )
+    print("\n[BRATS] Se requieren T1CE, T1, T2 y FLAIR reales y alineadas.")
+    print("[BRATS] Se usará el método heurístico para modalidad única.")
+    return None
 
 
 def verify_brats_model():

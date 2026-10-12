@@ -319,7 +319,8 @@ def cmd_radiomics(args):
 # =============================================================================
 def cmd_verificar(args):
     """Repasa las etapas de `verificacion_integral.py` sin duplicar su logica."""
-    script = os.path.join(PADRE, "verificacion_integral.py")
+    script = os.path.join(
+        RAIZ, "herramientas", "diagnostico", "verificacion_integral.py")
     if not os.path.exists(script):
         print("No se encuentra %s" % script)
         return 1
@@ -439,4 +440,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
-

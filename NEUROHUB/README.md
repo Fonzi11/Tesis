@@ -14,9 +14,10 @@ cerebrales, generación de mallas 3D y exportación FBX para Unity.
 La interfaz actual es **PySide6/Qt** y vive en `src/ui_qt`:
 
 ```bash
-cd NEUROHUB
-pip install -r requirements.txt
-python -m src.ui_qt.app
+cd /d D:\Tesis\NEUROHUB
+D:\Tesis\.venv\Scripts\python.exe -m pip install -r requirements.txt
+D:\Tesis\.venv\Scripts\python.exe launcher.py doctor
+D:\Tesis\.venv\Scripts\python.exe launcher.py ui
 ```
 
 > **Interfaz legacy.** `main.py` (tkinter + pygame) se conserva como
@@ -29,6 +30,38 @@ python -m src.ui_qt.app
 pip install -r requirements.txt
 ```
 
+### Comandos oficiales
+
+Ejecuta siempre estos comandos desde `D:\Tesis\NEUROHUB` usando el Python del
+entorno `.venv`. `launcher.py` es el punto de entrada único:
+
+```bat
+cd /d D:\Tesis\NEUROHUB
+D:\Tesis\.venv\Scripts\python.exe launcher.py doctor
+D:\Tesis\.venv\Scripts\python.exe launcher.py ui
+D:\Tesis\.venv\Scripts\python.exe launcher.py verificar --etapa deps --etapa imports
+```
+
+En la interfaz, dentro de **Estudio**, usa **Carpeta DICOM...** para
+seleccionar la carpeta completa del estudio. La búsqueda incluye subcarpetas,
+por lo que no es necesario seleccionar los archivos `.dcm` uno por uno.
+**Archivo NIfTI...** queda disponible para cargar un volumen `.nii`/`.nii.gz`
+o un DICOM individual.
+
+Para procesar DICOM de pacientes y generar el modelo 3D:
+
+```bat
+cd /d D:\Tesis\NEUROHUB
+D:\Tesis\.venv\Scripts\python.exe herramientas\extraer_pacientes.py --listar
+D:\Tesis\.venv\Scripts\python.exe herramientas\convertir_paciente.py 890923
+D:\Tesis\.venv\Scripts\python.exe procesar_caso.py D:\Tesis\data\nifti\pacientes\890923.nii.gz
+```
+
+El último comando genera máscaras, mallas y renders bajo `D:\Tesis\salidas`.
+Para casos grandes puedes añadir `--rapido`; para la máxima resolución no lo
+añadas. `launcher.py doctor` informa si Docker/Raidionics está disponible, pero
+Docker no es necesario para el visor ni para el pipeline principal.
+
 ## 🖥️ Tecnologías
 
 | Tecnología | Rol |
@@ -40,17 +73,20 @@ pip install -r requirements.txt
 | **numpy / scipy** | Cálculo numérico y mapeo de voxeles |
 | **TotalSegmentator** | Segmentación de estructuras anatómicas |
 | **BraTS (SegResNet)** | Segmentación de tumores cerebrales |
+| **ONNX Runtime + DirectML** | Backend AMD para modelos ONNX exportados y validados |
 | **PyInstaller** | Generación de ejecutable standalone |
 
 ## 📁 Estructura
 
 ```
 NEUROHUB/
-├── main.py              # Interfaz legacy (tkinter/pygame) — no es el entry point
+├── launcher.py          # Punto de entrada único: UI, doctor y verificación
 ├── procesar_caso.py     # Pipeline completo de un caso
 ├── pipeline.py          # Orquestación del pipeline
 ├── render_caso.py       # Render y exportación de un caso
 ├── build_exe.py         # Genera ejecutable con PyInstaller
+├── herramientas/        # Conversión, exportación y utilidades del proyecto
+│   └── diagnostico/     # Verificación integral y diagnósticos opcionales
 ├── scripts/             # Comprobaciones de humo (pincel, mapeo, pintado real)
 ├── tests/               # Suite de tests (pytest)
 └── src/
@@ -60,19 +96,17 @@ NEUROHUB/
     ├── segmentacion_completa.py  # Segmentación completa + FBX Unity
     └── radiomics/       # Extracción de características radiómicas
 
-herramientas/            # (raíz del repo)
-├── descargar_braTS_muestra.py  # Descarga pacientes BraTS2021 de muestra
-├── generar_preview.py   # Genera salidas/preview_3d.png headless
-├── modelo_unico.py      # Une las mallas en un único FBX "NEUROHUB"
-├── validar_pipeline.py  # Validación del pipeline completo
-└── verificar_instalacion.py
-
 salidas/
 ├── mallas/*.stl             # Mallas 3D (cerebro, cráneo, tumor, vasos)
 ├── fbx/neurohub_completo.fbx  # UN solo FBX combinado para Unity (con materiales)
 ├── segmentaciones_ai/*.nii.gz # Máscaras NIfTI por estructura
 └── neuronavegacion/         # NIfTI por estructura para neuronavegación
 ```
+
+`data/`, `modelos_preentrenados/` y `salidas/` permanecen en la raíz del
+workspace (`D:\Tesis`) porque contienen datos clínicos, pesos grandes y
+resultados generados. El código y las herramientas viven en esta carpeta
+`NEUROHUB/`; no hay que duplicarlos ni ejecutar copias antiguas desde la raíz.
 
 ## 🖌️ Visor 2D y delineado de tumor
 
@@ -91,7 +125,10 @@ Atajos: `B` pincel · `E` borrar · `T` ir al corte con más tumor ·
 El radio del pincel se expresa en **voxels del volumen**, no en píxeles de
 pantalla, de modo que el tamaño del pincel es el mismo con cualquier nivel de
 zoom. La máscara se puede **guardar como NIfTI** (`Guardar máscara`) sobre la
-rejilla del volumen, o convertir a malla 3D con **Generar 3D**.
+rejilla del volumen, o usar **Segmentar y crear 3D** para guardar la anotación,
+reconstruir la superficie de alta calidad y actualizar inmediatamente el visor
+3D. La aplicación muestra en la cabecera el backend real de inferencia:
+`AMD` cuando DirectML está disponible y `CPU` cuando no lo está.
 
 ### Dónde busca el visor el volumen
 
@@ -146,6 +183,30 @@ contraste). En ese caso NEUROHUB aplica el **método morfológico heurístico**
 real (`generate_tumor_mask`): núcleo sólido (percentil 95) + histeresis de
 extensión (umbral permisivo con dilatación condicionada), produciendo una
 máscara `tumor_heur.nii.gz` con volumen reportado en cm³.
+
+### Backend AMD Radeon
+
+La Radeon se detecta mediante `DmlExecutionProvider` de ONNX Runtime, no
+mediante `torch.cuda` ni `nvidia-smi`. La aceleración de render VTK/OpenGL es
+independiente de la inferencia. El visor 3D usa la GPU para dibujar la escena,
+pero la reconstrucción geométrica (marching cubes, suavizado y escritura STL)
+es un paso de CPU. TotalSegmentator/nnUNet no acepta DirectML en
+su interfaz actual, por lo que el pipeline lo ejecuta en CPU y lo declara en
+los logs; nunca se etiqueta como GPU para ocultar ese fallback. Los modelos
+ONNX que se incorporen al proyecto pueden seleccionar DirectML automáticamente
+y conservar `CPUExecutionProvider` como fallback. Para forzar el backend:
+
+```text
+NEUROHUB_ONNX_PROVIDER=directml
+```
+
+Si DirectML no está instalado, esta variable produce un error explícito en vez
+de degradar silenciosamente a CPU. Las máscaras clínicas solo deben generarse
+con un modelo validado para la modalidad y el modo solicitado.
+
+Por defecto no se inicializa CUDA ni se consulta el driver NVIDIA. La variable
+`NEUROHUB_ENABLE_CUDA=1` queda únicamente como compatibilidad explícita para
+otra máquina; no forma parte de la ruta AMD de este proyecto.
 
 ### RM T1 con contraste: detección por forma (`generate_tumor_mask_t1`)
 
@@ -250,6 +311,25 @@ Archivos individuales con materiales PBR (color por estructura):
 ### STL para neuronavegación/impresión 3D
 - `salidas/mallas/*.stl` — mallas de máxima resolución (marching cubes)
 - Compatible con Medtronic StealthStation, BrainLab, 3D Slicer
+
+### Flujo Unity → gafas AR
+
+El flujo completo de preparación, validación espacial, importación en Unity,
+construcción de la escena de neuronavegación y despliegue a gafas AR está
+documentado en
+[`docs/FLUJO_NEURONAVEGACION_UNITY_AR.md`](../docs/FLUJO_NEURONAVEGACION_UNITY_AR.md).
+Incluye:
+
+- Diagrama Mermaid DICOM/NIfTI → NEUROHUB → Unity → dispositivo AR.
+- Paquete recomendado con FBX, STL, máscaras y `manifest.json`.
+- Controles de escala, orientación, registro, tracking y rendimiento.
+- Separación explícita entre funcionalidades implementadas y pasos que deben
+  completarse en Unity.
+- Advertencias para no presentar vasos o aneurismas si no existe una máscara
+  vascular real y validada.
+
+El FBX es una salida de visualización; no sustituye la validación clínica ni
+garantiza por sí mismo el registro del modelo con el paciente.
 
 ### Ejecutable standalone
 ```bash

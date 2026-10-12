@@ -15,17 +15,17 @@ from PySide6.QtGui import QColor, QFont
 # =============================================================================
 # Color2..Color7 replican los roles de Raidionics (fondo, widget, presion,
 # hover, borde, texto) para que la interfaz se lea igual.
-COLOR_BG = "#1b1b1f"          # Color2 - fondo de la aplicacion
-COLOR_PANEL = "#242428"       # Color3 - fondo de paneles
-COLOR_PANEL_ALT = "#2e2e33"   # Color4 - alternativa / tarjetas
-COLOR_SELECCION = "#3a3a42"   # Color5 - item seleccionado
-COLOR_HOVER = "#4a4a54"       # Color6 - presion / hover fuerte
-COLOR_BORDE = "#5a5a66"       # borde de separadores
-COLOR_TEXTO = "#c8c8d0"       # Color7 - texto principal
-COLOR_TEXTO_SEC = "#9090a0"
-COLOR_ACENTO = "#30b7e0"      # cian, usado en barras de progreso
-COLOR_OK = "#37eb7e"
-COLOR_WARN = "#f5a623"
+COLOR_BG = "#10141c"          # fondo de la aplicacion
+COLOR_PANEL = "#171e29"       # fondo de paneles
+COLOR_PANEL_ALT = "#202b3a"   # alternativa / tarjetas
+COLOR_SELECCION = "#263b52"   # item seleccionado
+COLOR_HOVER = "#2d4964"       # hover fuerte
+COLOR_BORDE = "#33485d"       # separadores
+COLOR_TEXTO = "#e5edf5"       # texto principal
+COLOR_TEXTO_SEC = "#91a4b7"
+COLOR_ACENTO = "#41d7e8"      # cian clínico
+COLOR_OK = "#48e39a"
+COLOR_WARN = "#ffbe5c"
 COLOR_ERROR = "#ff5c5c"
 COLOR_VOZ = "#b06ad4"         # violeta: convencion radiologica para voz
 
@@ -107,9 +107,10 @@ QGroupBox::title {{
 QPushButton {{
     background-color: {COLOR_PANEL_ALT};
     border: 1px solid {COLOR_BORDE};
-    border-radius: 4px;
-    padding: 5px 12px;
+    border-radius: 6px;
+    padding: 6px 13px;
     color: {COLOR_TEXTO};
+    min-height: 22px;
 }}
 QPushButton:hover {{ background-color: {COLOR_HOVER}; }}
 QPushButton:pressed {{ background-color: {COLOR_SELECCION}; }}
@@ -209,7 +210,7 @@ QTabWidget::pane {{ border: 1px solid {COLOR_BORDE}; border-radius: 4px; top: -1
 QTabBar::tab {{
     background: {COLOR_PANEL};
     border: 1px solid {COLOR_BORDE};
-    padding: 5px 14px;
+    padding: 8px 18px;
     margin-right: 2px;
     border-top-left-radius: 4px; border-top-right-radius: 4px;
 }}
@@ -226,6 +227,31 @@ QToolTip {{
     border: 1px solid {COLOR_BORDE};
     padding: 4px;
 }}
+
+QScrollBar:vertical {{
+    background: {COLOR_BG};
+    width: 10px;
+    margin: 2px;
+}}
+QScrollBar::handle:vertical {{
+    background: {COLOR_BORDE};
+    min-height: 24px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {COLOR_ACENTO}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar:horizontal {{
+    background: {COLOR_BG};
+    height: 10px;
+    margin: 2px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {COLOR_BORDE};
+    min-width: 24px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: {COLOR_ACENTO}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 
 /* --------------------------------------------------------------- Consola */
 QTextEdit#consola {{

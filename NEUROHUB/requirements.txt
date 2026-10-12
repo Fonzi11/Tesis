@@ -36,3 +36,9 @@ trimesh>=4.0
 # CUDA solo se quiere si hay GPU; en CPU funciona igual, más lento).
 TotalSegmentator>=2.4
 # monai  (opcional: segmentación de tumor con modelos BraTS)
+
+# Inferencia AMD opcional para modelos exportados a ONNX. TotalSegmentator
+# sigue requiriendo su runtime nnUNet y se mantiene en CPU si no hay CUDA.
+onnxruntime-directml>=1.18
+onnx>=1.16
+onnxscript>=0.2

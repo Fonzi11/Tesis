@@ -33,6 +33,7 @@ from .pipeline_bridge import (
 )
 from . import mesh_store
 from . import pbr
+from ..hardware_backend import describe_backends
 
 
 class MainWindow(QMainWindow):
@@ -41,7 +42,8 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("NEUROHUB  ·  Neuroimagen clinica")
-        self.resize(1440, 900)
+        self.resize(1600, 980)
+        self.setMinimumSize(1180, 760)
 
         # Estado de la sesion (sin Qt: se podria probar aislado).
         self.modelo = StudyModel()
@@ -73,11 +75,11 @@ class MainWindow(QMainWindow):
         cuerpo.setSpacing(8)
 
         self.panel_estudio = StudyPanel()
-        self.panel_estudio.setFixedWidth(300)
+        self.panel_estudio.setFixedWidth(286)
         cuerpo.addWidget(self.panel_estudio)
 
         self.panel_capas = LayersPanel()
-        self.panel_capas.setFixedWidth(250)
+        self.panel_capas.setFixedWidth(236)
         cuerpo.addWidget(self.panel_capas)
 
         # Visores en pestanas: 3D y 2D conviven como en las ventanas separadas
@@ -105,7 +107,7 @@ class MainWindow(QMainWindow):
     def _construir_cabecera(self):
         """Barra superior: marca, datos del caso y progreso."""
         self._header = QWidget()
-        self._header.setFixedHeight(88)
+        self._header.setFixedHeight(102)
         self._header.setStyleSheet(
             f"background-color: {COLOR_PANEL};"
             f" border-bottom: 1px solid {COLOR_BORDE};")
@@ -132,24 +134,30 @@ class MainWindow(QMainWindow):
         self.card_estructuras = Card("ESTRUCTURAS", "0")
         self.card_visibles = Card("VISIBLES", "0")
         self.card_estado = Card("ESTADO", "Inactivo")
-        for c in (self.card_estructuras, self.card_visibles, self.card_estado):
+        self.card_backend = Card("INFERENCIA", "AMD")
+        self.card_backend.setToolTip(
+            "Backend real de inferencia. El render 3D usa OpenGL de la GPU; "
+            "la reconstrucción de superficies puede usar CPU.")
+        for c in (self.card_estructuras, self.card_visibles, self.card_estado,
+                  self.card_backend):
             c.setFixedWidth(148)
             lay.addWidget(c)
+        self._actualizar_backend()
         lay.addStretch(1)
 
         # Progreso circular + acciones de vista.
         self.barra_progreso = QCircularProgressBar(diameter=68)
         lay.addWidget(self.barra_progreso)
 
-        self._btn_reset = QPushButton("Restablecer vista")
+        self._btn_reset = QPushButton("⟳  Restablecer")
         self._btn_reset.setToolTip("Reencuadrar la camara 3D")
         lay.addWidget(self._btn_reset)
 
-        self._btn_snapshot = QPushButton("Guardar imagen")
+        self._btn_snapshot = QPushButton("▣  Guardar imagen")
         self._btn_snapshot.setToolTip("Exportar la vista 3D actual a PNG")
         lay.addWidget(self._btn_snapshot)
 
-        self._btn_guardar_2d = QPushButton("Guardar corte")
+        self._btn_guardar_2d = QPushButton("▧  Guardar corte")
         self._btn_guardar_2d.setToolTip("Exportar el corte 2D visible a PNG")
         lay.addWidget(self._btn_guardar_2d)
 
@@ -177,6 +185,19 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Listo")
         return pie
+
+    def _actualizar_backend(self):
+        """Muestra el backend detectado sin afirmar aceleración no verificada."""
+        try:
+            texto = describe_backends()
+        except Exception as exc:
+            self.card_backend.set_value("Error", COLOR_WARN)
+            self.card_backend.setToolTip(f"No se pudo detectar el backend: {exc}")
+            return
+        amd = "amd-directml=sí" in texto
+        self.card_backend.set_value("AMD" if amd else "CPU",
+                                    COLOR_OK if amd else COLOR_WARN)
+        self.card_backend.setToolTip(texto)
 
     # ==================================================================
     # CONEXIONES
@@ -254,7 +275,13 @@ class MainWindow(QMainWindow):
         from .. import volumen_2d as v2d
 
         try:
-            volumen_path = mesh_store.buscar_volumen(ruta_base, mesh_store.SALIDAS_DIR)
+            # Se mira tambien `salidas/` (y no solo `segmentaciones_ai`) porque
+            # `_asegurar_volumen_en_salidas` deja ahi la copia de la imagen del
+            # paciente: es el unico sitio donde hay un NIfTI que sea IMAGEN y
+            # no una etiqueta. Sin anadirla aqui, el visor 2D seguia sin
+            # volumen y se quedaba en modo visor-de-PNG.
+            volumen_path = mesh_store.buscar_volumen(
+                ruta_base, mesh_store.SALIDAS_DIR)
             if not volumen_path:
                 self.visor_2d.set_volumen(None)
                 self.consola.log(

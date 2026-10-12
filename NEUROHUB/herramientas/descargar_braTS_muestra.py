@@ -20,7 +20,8 @@ HF_REPO = "rocky93/BraTS_segmentation"
 API_TREE = f"https://huggingface.co/api/datasets/{HF_REPO}/tree/main"
 BASE_RAW = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main"
 MODS = ("flair", "t1ce", "t2", "t1", "seg")
-_SALIDA_DEF = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+_SALIDA_DEF = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                           os.path.abspath(__file__)))),
                            "data", "nifti", "braTS_sample")
 
 

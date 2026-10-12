@@ -27,9 +27,27 @@ if BASE_DIR not in sys.path:
 from src.ui_qt import mesh_store                       # noqa: E402
 
 
-def _nifti(ruta, shape=(8, 10, 12), valor=1):
-    """Escribe una NIfTI pequena y devuelve la ruta."""
-    arr = np.full(shape, valor, dtype=np.uint8)
+def _nifti(ruta, shape=(8, 10, 12), valor=1, textura=False):
+    """Escribe una NIfTI pequena y devuelve la ruta.
+
+    `textura=True` escribe un degradado en vez de un valor constante. Hace
+    falta porque `mesh_store._parece_imagen` decide por CONTENIDO (cuantos
+    valores de gris distintos tiene), no por nombre: un volumen uniforme de un
+    solo valor es, para ese filtro, una etiqueta, no una imagen. Los fixtures
+    que quieren representar una IMAGEN deben traer valores.
+    """
+    if textura:
+        # Se necesita MUCHOS valores de gris distintos (el umbral de
+        # `IMAGEN_MIN_VALORES` esta en 48). Un degradado entero sobre un
+        # volumen pequeno solo da ~28 valores aunque se escale, asi que se
+        # genera una senoidal continua, que es lo mas parecido a un tejido.
+        zz, yy, xx = np.meshgrid(
+            *[np.linspace(0.0, 6.0, n, dtype=np.float32) for n in shape],
+            indexing="ij")
+        arr = (127.0 + 120.0 * np.sin(xx) * np.cos(yy * 0.5) * np.sin(zz * 0.3))
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    else:
+        arr = np.full(shape, valor, dtype=np.uint8)
     img = sitk.GetImageFromArray(arr)
     img.SetSpacing((1.0, 1.0, 1.0))
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
@@ -43,7 +61,7 @@ class TestBusquedaDeVolumen:
         d = tmp_path / "BraTS2021_00042"
         d.mkdir()
         for suf in ("t1", "t1ce", "t2", "flair"):
-            _nifti(str(d / f"BraTS2021_00042_{suf}.nii.gz"))
+            _nifti(str(d / f"BraTS2021_00042_{suf}.nii.gz"), textura=True)
         _nifti(str(d / "BraTS2021_00042_seg.nii.gz"))
 
         v = mesh_store.buscar_volumen(str(d))
@@ -66,14 +84,14 @@ class TestBusquedaDeVolumen:
         """Si esta `volumen_paciente`, gana al resto."""
         d = tmp_path / "caso"
         d.mkdir()
-        _nifti(str(d / "otro_flair.nii.gz"))
-        _nifti(str(d / "volumen_paciente.nii.gz"))
+        _nifti(str(d / "otro_flair.nii.gz"), textura=True)
+        _nifti(str(d / "volumen_paciente.nii.gz"), textura=True)
         assert mesh_store.buscar_volumen(str(d)).endswith("volumen_paciente.nii.gz")
 
     def test_una_modalidad_suelta_tambien_sirve(self, tmp_path):
         d = tmp_path / "caso"
         d.mkdir()
-        _nifti(str(d / "paciente_t1.nii.gz"))
+        _nifti(str(d / "paciente_t1.nii.gz"), textura=True)
         assert mesh_store.buscar_volumen(str(d)).endswith("paciente_t1.nii.gz")
 
     def test_sin_nada_devuelve_none(self, tmp_path):

@@ -195,6 +195,30 @@ class PipelineWorker(QObject):
         self.progress.emit(1.0)
         self.finished.emit(ok, mensaje)
 
+    def _asegurar_volumen_en_salidas(self, nifti_path):
+        """Copia la imagen del paciente a `salidas/volumen_paciente.nii.gz`.
+
+        Se omite si ya esta, si el origen es el mismo fichero o si la copia
+        existente es al menos tan reciente como la original: en ese caso ya
+        hay una copia valida y reescribirla solo gastaria I/O.
+        """
+        destino = os.path.join(SALIDAS_DIR, "volumen_paciente.nii.gz")
+        try:
+            if os.path.exists(destino):
+                if (os.path.normcase(os.path.abspath(destino))
+                        == os.path.normcase(os.path.abspath(nifti_path))):
+                    return
+                if os.path.getmtime(destino) >= os.path.getmtime(nifti_path):
+                    return
+            import shutil
+            shutil.copy2(nifti_path, destino)
+            self._info(f"Volumen del paciente copiado a {destino}", "INFO")
+        except Exception as e:                               # noqa: BLE001
+            # No es critico: el pipeline sigue, y el visor 2D cae al modo
+            # visor-de-PNG, que es lo que pasaba siempre.
+            self._info(f"No se pudo copiar el volumen a las salidas: {e}",
+                       "WARNING")
+
     # ------------------------------------------------------------------
     def _ejecutar_pipeline(self):
         os.makedirs(self.output_dir, exist_ok=True)
@@ -222,6 +246,15 @@ class PipelineWorker(QObject):
                        "ERROR")
             return False
         self._info(f"Volumen: {nifti_path}", "SUCCESS")
+        # Se copia la imagen del paciente al directorio de salida. Sin esto,
+        # `salidas/segmentaciones_ai` solo contiene etiquetas (una por
+        # estructura) y el visor 2D se queda SIN NINGUN volumen real que
+        # mostrar: al buscar una imagen, la unica NIfTI que encaja con el
+        # patron BraTS `*_t1.nii.gz` es `vertebrae_T1.nii.gz`, una mascara de
+        # vertebra. El panel se llenaba de gris con un tumor verde encima y
+        # parecia no mostrar la imagen. Es el volumen que se esta segmentando,
+        # asi que copiarlo no engorda nada y deja el caso completo.
+        self._asegurar_volumen_en_salidas(nifti_path)
 
         # ---------------- Paso 2: segmentacion AI -------------------------
         if self._cancelado:

@@ -47,3 +47,8 @@ _shot_atlas.py
 # ===== IDE y sistema operativo =====
 .DS_Store
 Thumbs.db
+
+# ===== Configuración local del agente/editor =====
+.agents/
+.claude/
+skills-lock.json

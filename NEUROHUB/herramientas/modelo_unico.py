@@ -21,7 +21,8 @@ except ImportError:
     sys.exit("[MODELO] bpy no disponible. Usa: blender --background --python "
              "herramientas/modelo_unico.py  (Blender debe estar instalado)")
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
 STL_DIR = os.path.join(BASE_DIR, "salidas", "mallas")
 OUT_FBX = os.path.join(BASE_DIR, "salidas", "fbx", "neurohub_completo.fbx")
 

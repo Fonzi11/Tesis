@@ -70,13 +70,13 @@ def nombre_a_color(nombre_stl):
 
 
 def main():
+    proyecto = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
     ap = argparse.ArgumentParser()
     ap.add_argument("--mallas", default=os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "salidas", "mallas"))
+        proyecto, "salidas", "mallas"))
     ap.add_argument("--out", default=os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "salidas", "preview_3d.png"))
+        proyecto, "salidas", "preview_3d.png"))
     ap.add_argument("--elev", type=float, default=22.0)
     ap.add_argument("--azim", type=float, default=-58.0)
     ap.add_argument("--dpi", type=int, default=240)

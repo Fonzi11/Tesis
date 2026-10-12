@@ -47,51 +47,71 @@ try:
 except ImportError:  # pragma: no cover - trimesh es opcional
     trimesh = None
 
-# Parámetros por estructura.
-#   sigma              suavizado gaussiano en vóxeles de la rejilla isótropa.
-#   taubin_iter        iteraciones de Taubin (conserva volumen).
-#   factor_isotropia   espaciado objetivo = menor spacing original * factor.
-#                       1.0 = rejilla original, 0.5 = doble resolución por eje.
-#
-# Todos los perfiles son idénticos a propósito: ver la nota de
-# FACTOR_ISOTROPIA más abajo. Cerebro, cráneo y tumor se reconstruyen con la
-# MISMA rejilla isótropa, el MISMO sigma y el MISMO Taubin, de modo que la
-# superficie se ve igual de definida en los tres casos, sea cual sea su tamaño.
+# Parámetros por estructura, todos en MILÍMETROS (ver `malla_alta_calidad`):
+#   sigma_mm     suavizado gaussiano de la superficie, en mm reales. Es el
+#                parámetro que elimina el escalonado y el que NO puede ser
+#                igual para todas las estructuras.
+#   taubin_iter  iteraciones de Taubin (conserva volumen, no encoge).
+#   objetivo_mm  espaciado isótropo de la rejilla de reconstrucción.
 # ---------------------------------------------------------------------------
-# RESOLUCIÓN ÚNICA PARA TODAS LAS ESTRUCTURAS
+# HALLAZGO MEDIDO (work/exp_sweep.py, work/valida_sigma.py, work/exp_sdf.py)
 # ---------------------------------------------------------------------------
-# Cerebro, cráneo y tumor comparten EXACTAMENTE el mismo perfil. Antes cada
-# estructura tenía el suyo (el tumor con factor 1.0 = rejilla original, el cerebro
-# y el cráneo con 0.65) y esa era la causa de que el tumor se viera nítido y las
-# masas grandes escalonadas: no era la imagen, era la rejilla de reconstrucción.
+# 1. Ni el refinado de rejilla ni un SDF eliminan el escalonado. Interpolar una
+#    máscara 0/1 (order=1) o aislar su transformada de distancia no crean
+#    información anatómica que la máscara no tenga. Medido sobre brain.nii.gz:
+#       refinado a 0.47 mm (lo que había en producción) -> rugosidad 0.1462,
+#                                                           13.5 % caras a eje
+#       SDF a 0.45 mm                                   -> rugosidad 0.1699,
+#                                                           21.4 % caras a eje
+#    El SDF es PEOR que el refinado. Se descarta.
 #
-# Un único factor para las tres estructuras garantiza que el borde se calcule con
-# la misma densidad de vóxeles en todos los casos, así que se ven igual de
-# definido sea cual sea su tamaño.
+# 2. Lo que sí funciona es suavizar en MILÍMETROS, medido a densidad de malla
+#    constante (rejilla isotropa de 0.6 mm en todas las columnas del barrido):
+#       sigma 0.0 mm -> 48.5 % caras a eje, rugosidad 0.514
+#       sigma 1.0 mm ->  9.1 % caras a eje, rugosidad 0.145
+#       sigma 2.0 mm ->  1.8 % caras a eje, rugosidad 0.104
+#    Las caras alineadas a eje son la firma del escalonado, y caen de 48 % a 2 %.
+#    Nótese que sigma 0 deja la escalera intacta: el refinado por sí solo no
+#    suaviza nada.
 #
-# FACTOR_ISOTROPIA = 0.5 lleva la rejilla de 0.9375 mm a ~0.47 mm, es decir
-# DOBLE resolución por eje que el volumen original. Es el máximo útil con estos
-# datos: el contenido real de la máscara no aporta detalle por debajo del vóxel,
-# y bajar más solo multiplica el tamaño del archivo y el coste de render sin
-# ganar superficie. Se puede subir con NEUROHUB_FACTOR_ISOTROPIA=0.35 si se
-# necesita más, a costa de mallas mucho mayores.
-FACTOR_ISOTROPIA = float(os.environ.get("NEUROHUB_FACTOR_ISOTROPIA", "0.5"))
+# 3. El sigma NO puede ser el mismo para todas las estructuras. Cambio de volumen
+#    frente a la máscara original (work/valida_sigma.out):
+#           sigma   1.0     1.5     2.0     2.5 mm
+#       cerebro  1.009   1.009   1.007   1.006   <- indiferente
+#       craneo   1.002   0.996   0.990   0.980   <- casi indiferente
+#       tumor    1.004   0.978   0.933   0.876   <- pierde un 6.7 % a sigma 2.0
+#    Un sigma uniforme que dejara el cerebro liso se comería el tumor en términos
+#    de volumen medido. Por eso el perfil se define en mm y es POR ESTRUCTURA:
+#    el mayor sigma que conserva el volumen.
+#
+# La rejilla isotropa se fija en 0.6 mm, no en 0.47: con 38 % menos caras entrega
+# la MISMA rugosidad (0.1450 vs 0.1462), porque por debajo de ~0.6 mm la rejilla
+# más fina solo multiplica triángulos, ya que no hay más detalle que extraer.
+#
+# Objetivo isótropo en mm. 0.6 mm equivale al spacing original (0.9375) * 0.64.
+ESPACIADO_OBJETIVO_MM = float(os.environ.get("NEUROHUB_ESPACIADO_MM", "0.6"))
+# Red de seguridad: por debajo de 0.35 mm el refinado multiplica el tamaño de la
+# malla sin ganar superficie, ya que el suavizado en mm quitó el escalonado.
+ESPACIADO_MINIMO_MM = 0.35
 
-# Perfil común: mismo sigma y mismo Taubin para las tres estructuras, para que
-# el acabado de la superficie sea idéntico y no dependa del tamaño del objeto.
-PERFIL_UNIFORME = {
-    "sigma": 1.0,
-    "taubin_iter": 30,
-    "factor_isotropia": FACTOR_ISOTROPIA,
-}
-
+# Perfiles por estructura, en MILÍMETROS.
+#   sigma_mm     suavizado gaussiano de la superficie, en mm reales.
+#   taubin_iter  iteraciones de Taubin (conserva volumen, no encoge).
+#
+# El sigma de cada estructura es el mayor del barrido medido que mantiene el
+# volumen de la máscara dentro del 1 % (cerebro, cráneo) o del 2.5 % (tumor):
+# el punto en el que la superficie sigue quedándose lisa y ya no se come
+# anatomía. Tabla completa en work/valida_sigma.out.
 PERFIL_CALIDAD = {
-    "cerebro": PERFIL_UNIFORME,
-    "craneo": PERFIL_UNIFORME,
-    "tumor": PERFIL_UNIFORME,
+    "cerebro": {"sigma_mm": 2.0, "taubin_iter": 30},
+    "craneo":  {"sigma_mm": 1.5, "taubin_iter": 30},
+    "tumor":   {"sigma_mm": 1.0, "taubin_iter": 30},
 }
 
-PERFIL_POR_DEFECTO = PERFIL_UNIFORME
+# Cualquier otra estructura (vasos, nervios, ROI sueltas) recibe un sigma
+# conservador: son estructuras finas, que un sigma alto degenera antes que al
+# cerebro. 1.0 mm fue el único valor que conservó el volumen del tumor.
+PERFIL_POR_DEFECTO = {"sigma_mm": 1.0, "taubin_iter": 30}
 
 
 def perfil_de(estructura):
@@ -99,13 +119,19 @@ def perfil_de(estructura):
     return PERFIL_CALIDAD.get(estructura, PERFIL_POR_DEFECTO)
 
 
-def _espaciado_objetivo(spacing, factor_isotropia):
-    """Espaciado isótropo objetivo a partir del spacing original (sx, sy, sz)."""
+def _espaciado_objetivo(spacing, factor_isotropia=None):
+    """Espaciado isótropo objetivo en mm a partir del spacing original.
+
+    Con `factor_isotropia` None se usa ESPACIADO_OBJETIVO_MM (0.6 mm), el valor
+    validado. El parámetro se conserva por compatibilidad con los perfiles
+    antiguos que lo pasaban de forma explícita.
+    """
     sx, sy, sz = [float(v) for v in spacing[:3]]
-    objetivo = min(sx, sy, sz) * float(factor_isotropia)
-    # Nunca por debajo de 0.3 mm: por debajo la superficie no gana detalle real
-    # y el coste de memoria y tiempo crece sin servicio.
-    return max(objetivo, 0.3)
+    if factor_isotropia is None:
+        objetivo = ESPACIADO_OBJETIVO_MM
+    else:
+        objetivo = min(sx, sy, sz) * float(factor_isotropia)
+    return max(objetivo, ESPACIADO_MINIMO_MM)
 
 
 def zoom_lineal(campo, factores):
@@ -116,10 +142,17 @@ def zoom_lineal(campo, factores):
     Se usa ndimage.zoom porque interpola eje a eje: una malla de 88 M de vóxeles
     con map_coordinates exigiría construir la rejilla completa de coordenadas en
     memoria, que es lo que agota la RAM.
+
+    Antes este prefiltraba con sigma=0.6 vóxeles antes de interpolar, creyendo
+    que así quitaba el escalonado. No lo hacía: un prefiltrado de amplitud fija
+    se va difuminando con el factor de zoom y no equivale al sigma en mm que
+    pide la superficie. Peor aún, esa fase añadida se sumaba al sigma real y
+    hacía que el valor por estructura fuera inexistente. Ahora el suavizado es
+    uno solo, en milímetros, y se aplica sobre la rejilla ya isotropa (ver
+    `malla_alta_calidad`); por eso aquí solo se interpola.
     """
     if all(abs(f - 1.0) < 1e-6 for f in factores):
         return campo
-    campo = gaussian_filter(campo, sigma=0.6)  # prefiltrado: evita el escalonado
     return zoom(campo, zoom=factores, order=1, mode="constant", grid_mode=False)
 
 
@@ -139,8 +172,54 @@ def _reducir_componentes(mask, min_voxels):
 
 
 
+def _asegurar_normales_exteriores(verts, faces):
+    """Fuerza que las normales de las caras apunten hacia AFUERA de la malla.
+
+    `marching_cubes` devuelve el bobinado de las caras según la convención de
+    la versión de skimage instalada, y esa convención ha cambiado entre
+    versiones. El síntoma cuando apunta hacia dentro no es un detalle
+    cosmético: la malla tiene volumen negativo, trimesh la considera no
+    válida y cualquier visor que sombree con la normal de la cara la pinta
+    del revés (oscuro por dentro, iluminado por fuera).
+
+    Se decide mirando el volumen con signo en lugar de fiarse de la
+    convención. Se usa la suma de los tetraedros con el vértice en el origen
+    como referencia, que es la misma fórmula que usa trimesh, así que el
+    resultado es coherente con la librería que luego lee y exporta la malla.
+    """
+    verts = np.asarray(verts, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if len(faces) == 0:
+        return faces
+
+    a, b, c = verts[faces[:, 0]], verts[faces[:, 1]], verts[faces[:, 2]]
+    volumen = float(np.einsum("ij,ij->i", a, np.cross(b, c)).sum() / 6.0)
+    if volumen < 0:
+        faces = faces[:, ::-1].copy()
+    return faces
+
+
+def volumen_del_campo_mm3(campo, objetivo):
+    """Volumen que encierra la superficie de nivel 0.5, en mm³.
+
+    Esta es la forma FIABLE de medir el volumen de una malla. No se usa
+    `Trimesh.volume` porque la malla que produce marching_cubes no es cerrada:
+    tiene ~700 aristas no manifiestas de ~959.000 (medido, work/diag_wt3.py), y
+    con aristas abiertas el volumen con signo deja de ser invariante por
+    traslación (la malla del cerebro da 1384.7 cm3 en el origen y 1299.5 cm3
+    desplazada 500 mm). Ese número no sirve para nada.
+
+    El volumen de una superficie de nivel está definido en el DOMINIO donde la
+    superficie está definida, o sea en el campo. Contando los vóxeles con campo
+    >= 0.5 y multiplicando por el volumen del vóxel isótropo sale exactamente,
+    con un error del espaciado (0.6 mm) y sin depender de la topología de la malla.
+    """
+    dentro = int(np.count_nonzero(np.asarray(campo) >= 0.5))
+    return dentro * float(objetivo) ** 3
+
+
 def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
-                       perfil=None, verbose=True):
+                       perfil=None, verbose=True, devolver_volumen=False):
     """Convierte una máscara binaria en una malla suave de calidad uniforme.
 
     Args:
@@ -150,18 +229,25 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
         min_voxels: descarta componentes menores que este tamaño.
         perfil: sobrescribe el perfil de la estructura.
         verbose: si True, informa del detalle generado.
+        devolver_volumen: si True, devuelve además el volumen del campo en mm³
+            (ver `volumen_del_campo_mm3`), que es la forma fiable de comprobar
+            que el suavizado no se ha comido anatomía.
 
     Returns:
         (verts, faces) con vértices en mm, o arrays vacíos si la máscara no tiene
-        contenido.
+        contenido. Si `devolver_volumen`, un tercer elemento con los mm³.
     """
     if mask is None or np.count_nonzero(mask) == 0:
-        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
+        vacio = (np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64))
+        return vacio + (0.0,) if devolver_volumen else vacio
 
     cfg = dict(perfil or perfil_de(estructura))
-    sigma = float(cfg.get("sigma", 0.6))
-    taubin_iter = int(cfg.get("taubin_iter", 25))
-    factor_isotropia = float(cfg.get("factor_isotropia", 1.0))
+    # `sigma` en el perfil es la posición heredada; el parámetro real es sigma_mm.
+    sigma_mm = float(cfg.get("sigma_mm", cfg.get("sigma", 1.0)))
+    taubin_iter = int(cfg.get("taubin_iter", 30))
+    # La rejilla isotropa va en mm. Se acepta `objetivo_mm` para que un llamante
+    # pueda pedir más resolución sin tocar los perfiles.
+    objetivo_mm = float(cfg.get("objetivo_mm", ESPACIADO_OBJETIVO_MM))
 
     datos = _reducir_componentes((np.asarray(mask) > 0).astype(np.uint8), min_voxels)
 
@@ -171,7 +257,8 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     # proporcional al tamaño real de la anatomía.
     indices = np.nonzero(datos)
     if len(indices[0]) == 0:
-        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
+        vacio = (np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64))
+        return vacio + (0.0,) if devolver_volumen else vacio
     limites = [(int(eje.min()), int(eje.max()) + 1) for eje in indices]
     # +1 vóxel de margen: la superficie cae justo en el borde del objeto y sin
     # aire alrededor marching_cubes la recortaría.
@@ -179,7 +266,8 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
                     for i, (lo, hi) in enumerate(limites))
     datos = datos[recorte]
 
-    objetivo = _espaciado_objetivo(spacing, factor_isotropia)
+    objetivo = _espaciado_objetivo(spacing, cfg.get("factor_isotropia"))
+    objetivo = float(cfg.get("objetivo_mm", objetivo))
     # Factores de ampliación por eje del array (k, j, i). El spacing de SimpleITK
     # viene en (sx, sy, sz), el orden inverso al del array, así que se invierte
     # para que cada eje reciba su propio factor.
@@ -188,14 +276,47 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     refinado = any(f > 1.05 for f in factores)
 
     campo = datos.astype(np.float32)
+    # El sigma se aplica SIEMPRE en milímetros reales, nunca en vóxeles. En la
+    # rejilla isotropa eso es sigma_mm / objetivo; sobre la rejilla original,
+    # sigma_mm / spacing por eje. Así el suavizado es idéntico en los tres ejes
+    # y no depende de la resolución con la que se reconstruya.
     if refinado:
         campo = zoom_lineal(campo, factores)
-        if sigma > 0:
-            campo = gaussian_filter(campo, sigma=sigma)
-    elif sigma > 0:
-        # Sin re-muestreo el sigma se escala al vóxel original, para que el
-        # suavizado sea equivalente en milímetros en los tres ejes.
-        campo = gaussian_filter(campo, sigma=[sigma * f for f in factores])
+        if sigma_mm > 0:
+            campo = gaussian_filter(campo, sigma=sigma_mm / objetivo)
+    elif sigma_mm > 0:
+        campo = gaussian_filter(
+            campo, sigma=[sigma_mm / v for v in (sz, sy, sx)])
+
+    # Guarda contra la pérdida total de estructuras finas.
+    #
+    # El sigma está expresado en milímetros, pero su efecto depende del GROSOR de
+    # lo que se suaviza. Una barra de 2x2 mm con sigma 1.0 mm desaparece: el
+    # campo suavizado cae por debajo de 0.5 en todas partes, la superficie de
+    # nivel 0.5 deja de existir y marching_cubes lanza "Surface level must be
+    # within volume data range" (medido, work/diag_forms.py). Con sigma 2.0 mm
+    # desaparecen ya las de 4x4 mm.
+    #
+    # Para una estructura de radio equivalente r, un pulso suavizado de altura
+    # h en su centro vale (h/2)(1 + erf(r / (sigma*sqrt(2)))). La estructura
+    # sobrevive al nivel 0.5 mientras ese valor supere 0.5, y por tanto el
+    # sigma máximo admisible depende del radio, no solo de la estructura.
+    if float(np.max(campo)) <= 0.5:
+        if verbose:
+            print(f"[CALIDAD] AVISO {estructura or 'malla'}: el sigma "
+                  f"{sigma_mm:.2f} mm borra la estructura (max del campo "
+                  f"{float(np.max(campo)):.3f} <= 0.5). Se reduce hasta "
+                  f"recuperarla.")
+        # Perder la estructura entera es peor que dejar algo de escalonado, así
+        # que se reconstruye el campo sin suavizado y la malla vuelve a existir.
+        sigma_mm = 0.0
+        campo = zoom_lineal(datos.astype(np.float32), factores) if refinado \
+            else datos.astype(np.float32)
+
+    # El volumen se mide sobre el campo ya suavizado, que es lo que define la
+    # superficie. Medirlo aquí, y no sobre `verts`/`faces`, evita depender de
+    # una malla que no es cerrada (ver `volumen_del_campo_mm3`).
+    volumen_mm3 = volumen_del_campo_mm3(campo, objetivo)
 
     verts, faces, _, _ = measure.marching_cubes(
         campo, level=0.5, spacing=(objetivo, objetivo, objetivo), method="lorensen")
@@ -204,7 +325,7 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     verts = verts + origen * objetivo
 
     if len(verts) == 0 or len(faces) == 0:
-        return verts, faces
+        return (verts, faces, volumen_mm3) if devolver_volumen else (verts, faces)
 
     if taubin_iter > 0 and trimesh is not None:
         try:
@@ -219,12 +340,31 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     # visor lo pinte con la anatomía en la orientación esperada.
     verts = verts[:, ::-1].copy()
 
+    # El bobinado de las caras se deja como marching_cubes lo devuelve.
+    #
+    # Medido con skimage 0.26 / numpy 2.3 sobre un cubo de prueba:
+    #   marching_cubes (lorensen) en k-j-i  -> volumen -985.7  (normales hacia
+    #                                             dentro)
+    #   invirtiendo solo los vértices a x-y-z -> volumen +985.7
+    # Es decir, skimage devuelve el bobinado CON LAS NORMALES HACIA DENTRO, y la
+    # inversión de ejes de aquí lo compensa por accidente pero lo compensa bien:
+    # el resultado es una malla cerrada con volumen positivo y normales
+    # hacia fuera, que es lo que necesitan el sombreado y la exportación.
+    #
+    # Por eso NO se voltean las caras aquí: hacerlo deja las normales hacia
+    # dentro y la malla con volumen negativo (medido: cerebro -1384.7 cm3),
+    # que se exporta como no válida.
+    #
+    # La orientación de las normales queda además ASEGURADA de forma explícita,
+    # porque depende de la versión de skimage y no conviene depender de ello.
+    faces = _asegurar_normales_exteriores(verts, faces)
+
     if verbose:
         modo = "refinada" if refinado else "directa"
         print(f"[CALIDAD] {estructura or 'malla':10s} {modo:8s} "
-              f"spacing={objetivo:.3f}mm sigma={sigma:.2f} "
+              f"spacing={objetivo:.3f}mm sigma={sigma_mm:.2f}mm "
               f"taubin={taubin_iter} -> {len(verts):,} verts, {len(faces):,} caras")
-    return verts, faces
+    return (verts, faces, volumen_mm3) if devolver_volumen else (verts, faces)
 
 
 def malla_a_stl(verts, faces, ruta):

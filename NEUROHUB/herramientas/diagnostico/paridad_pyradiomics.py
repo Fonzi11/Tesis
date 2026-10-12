@@ -29,7 +29,9 @@ import traceback
 import numpy as np
 
 RAIZ_PYRADIOMICS = r"D:\Tesis\pyradiomics-3.0.1"
-SRC_NEUROHUB = r"D:\Tesis\NEUROHUB\src"
+SRC_NEUROHUB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "src")
 
 # PyRadiomics hace imports ABSOLUTOS internos (`from radiomics import
 # _cmatrices`), asi que el nombre `radiomics` le tiene que pertenecer a el. Por

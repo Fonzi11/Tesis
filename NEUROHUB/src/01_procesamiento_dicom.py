@@ -181,7 +181,28 @@ def resolve_input_volume(input_path, output_nifti):
     )
 
 
-def _build_totalsegmentator_command(input_nifti, output_dir, fast_mode=False, device="gpu"):
+def _dispositivo_totalsegmentator():
+    """Elige ``gpu`` solo si PyTorch puede usar CUDA de verdad.
+
+    TotalSegmentator/nnUNet no acepta DirectML como sustituto de CUDA. En una
+    Radeon, se debe devolver ``cpu`` y reservar DirectML para modelos ONNX que
+    lo soporten; fingir ``gpu`` haría que nnUNet intentase una ruta CUDA.
+    """
+    for variable in ("TOTALSEG_DEVICE", "NEUROHUB_TS_DEVICE"):
+        valor = os.environ.get(variable)
+        if valor in ("cpu", "gpu"):
+            return valor
+    if os.environ.get("NEUROHUB_ENABLE_CUDA") != "1":
+        return "cpu"
+    try:
+        import torch
+        return "gpu" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
+def _build_totalsegmentator_command(input_nifti, output_dir, fast_mode=False,
+                                    device=None):
     # Ejecutar siempre con el intrprete activo evita inconsistencias con wrappers .EXE.
     # Se invoca el lanzador shim y no `python -m totalsegmentator...` porque el
     # shim envuelve torch.load; ver _totalsegmentator_shim_path.
@@ -193,7 +214,7 @@ def _build_totalsegmentator_command(input_nifti, output_dir, fast_mode=False, de
         "-o",
         output_dir,
         "-d",
-        device,
+        device or _dispositivo_totalsegmentator(),
     ]
     if fast_mode:
         comando.append("--fast")

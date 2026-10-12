@@ -222,18 +222,27 @@ class StudyPanel(QWidget):
         cuerpo = grp_ent.body()
 
         self._ruta = QLineEdit()
-        self._ruta.setPlaceholderText("Ruta del estudio (DICOM o NIfTI)")
+        self._ruta.setPlaceholderText(
+            "Carpeta completa con DICOM o archivo NIfTI")
         self._ruta.setReadOnly(True)
-        self._ruta.setToolTip("Se rellena al elegir una carpeta o archivo")
+        self._ruta.setToolTip(
+            "La carpeta DICOM puede contener los archivos en subcarpetas")
         cuerpo.addWidget(self._ruta)
 
         fila = QHBoxLayout()
-        self._btn_cargar = QPushButton("Cargar...")
-        self._btn_cargar.setToolTip("Seleccionar la carpeta o el volumen del caso")
-        self._btn_cargar.clicked.connect(self._elegir_ruta)
+        self._btn_cargar = QPushButton("Carpeta DICOM...")
+        self._btn_cargar.setToolTip(
+            "Seleccionar la carpeta completa del estudio DICOM; "
+            "se buscaran series tambien dentro de subcarpetas")
+        self._btn_cargar.clicked.connect(self._elegir_carpeta_dicom)
+        self._btn_archivo = QPushButton("Archivo NIfTI...")
+        self._btn_archivo.setToolTip(
+            "Seleccionar un volumen NIfTI o un archivo DICOM individual")
+        self._btn_archivo.clicked.connect(self._elegir_archivo)
         self._btn_limpiar = QPushButton("Quitar")
         self._btn_limpiar.clicked.connect(self.limpiar_estudio)
         fila.addWidget(self._btn_cargar)
+        fila.addWidget(self._btn_archivo)
         fila.addWidget(self._btn_limpiar)
         cuerpo.addLayout(fila)
         lay.addWidget(grp_ent)
@@ -303,19 +312,25 @@ class StudyPanel(QWidget):
         self._actualizar_botones()
 
     # ------------------------------------------------------------------
-    def _elegir_ruta(self):
-        """Abre el selector de carpeta (o de archivo) y avisa a la ventana."""
+    def _elegir_carpeta_dicom(self):
+        """Selecciona una carpeta DICOM completa, incluidos sus subdirectorios."""
         ruta = QFileDialog.getExistingDirectory(
-            self, "Seleccionar estudio", os.path.expanduser("~"))
+            self, "Seleccionar carpeta completa del estudio DICOM",
+            os.path.expanduser("~"),
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks)
         if not ruta:
-            # Si se cancela el selector de carpeta, se ofrece el de archivos
-            # para poder elegir un NIfTI suelto.
-            archivo, _ = QFileDialog.getOpenFileName(
-                self, "Seleccionar volumen", os.path.expanduser("~"),
-                "Volumenes (*.nii *.nii.gz *.dcm);;Todos los archivos (*)")
-            if not archivo:
-                return
-            ruta = archivo
+            return
+        self.set_ruta(ruta)
+        self.pedir_carga.emit(ruta)
+
+    def _elegir_archivo(self):
+        """Selecciona un volumen NIfTI o un archivo DICOM individual."""
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar volumen", os.path.expanduser("~"),
+            "Volumenes (*.nii *.nii.gz *.dcm *.dicom *.ima);;"
+            "Todos los archivos (*)")
+        if not ruta:
+            return
         self.set_ruta(ruta)
         self.pedir_carga.emit(ruta)
 

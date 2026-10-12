@@ -2,7 +2,9 @@
 import sys
 import time
 
-sys.path.insert(0, r"D:\Tesis\NEUROHUB\src")
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(APP_ROOT, "src"))
 
 from radiomics.extract import ExtractionConfig, cargar_volumen, extraer_radiomics
 from radiomics.masks import de_nifti, magmas_braTS
