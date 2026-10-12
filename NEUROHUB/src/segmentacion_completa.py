@@ -324,6 +324,18 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
 
     resultados = {}
 
+    # No conservar un STL tumoral de una corrida anterior: si esta ejecución
+    # no recibe una delineación manual, ese archivo sería una salida falsa.
+    if not (mascara_tumor and os.path.exists(mascara_tumor)):
+        tumor_stl = os.path.join(salida_dir, "tumor.stl")
+        if os.path.exists(tumor_stl):
+            try:
+                os.remove(tumor_stl)
+                print("[SEG3D] tumor.stl anterior eliminado: falta "
+                      "delineación manual.")
+            except OSError as error:
+                print(f"[SEG3D] [!] No se pudo eliminar {tumor_stl}: {error}")
+
     import subprocess
     import shutil
 
