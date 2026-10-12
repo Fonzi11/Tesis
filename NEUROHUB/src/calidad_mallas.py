@@ -82,7 +82,9 @@ except ImportError:  # pragma: no cover - trimesh es opcional
 #       tumor    1.004   0.978   0.933   0.876   <- pierde un 6.7 % a sigma 2.0
 #    Un sigma uniforme que dejara el cerebro liso se comería el tumor en términos
 #    de volumen medido. Por eso el perfil se define en mm y es POR ESTRUCTURA:
-#    el mayor sigma que conserva el volumen.
+#    el mayor sigma que conserva el volumen. Los perfiles de cerebro y craneo
+#    usan ahora un margen visual mayor para una superficie mas cinematica; la
+#    segmentacion original sigue intacta y el tumor conserva el perfil medido.
 #
 # La rejilla isotropa se fija en 0.6 mm, no en 0.47: con 38 % menos caras entrega
 # la MISMA rugosidad (0.1450 vs 0.1462), porque por debajo de ~0.6 mm la rejilla
@@ -103,8 +105,8 @@ ESPACIADO_MINIMO_MM = 0.35
 # el punto en el que la superficie sigue quedándose lisa y ya no se come
 # anatomía. Tabla completa en work/valida_sigma.out.
 PERFIL_CALIDAD = {
-    "cerebro": {"sigma_mm": 2.0, "taubin_iter": 30},
-    "craneo":  {"sigma_mm": 1.5, "taubin_iter": 30},
+    "cerebro": {"sigma_mm": 2.5, "taubin_iter": 45},
+    "craneo":  {"sigma_mm": 2.0, "taubin_iter": 45},
     "tumor":   {"sigma_mm": 1.0, "taubin_iter": 30},
 }
 

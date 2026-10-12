@@ -223,7 +223,7 @@ class Volumen2D:
         return np.clip(x, 0.0, 1.0)
 
     @staticmethod
-    def _clahe(gris, kernel=48, clip=0.008):
+    def _clahe(gris, kernel=48, clip=0.005):
         """CLAHE por corte; si skimage no esta, devuelve la imagen tal cual."""
         try:
             from skimage import exposure
@@ -234,7 +234,7 @@ class Volumen2D:
             return gris
 
     @staticmethod
-    def _realzar_bordes(gris, sigma=0.8, peso=0.20):
+    def _realzar_bordes(gris, sigma=0.8, peso=0.10):
         """Unsharp mask: suma la version desenfocada para remarcar el relieve."""
         if peso <= 0:
             return gris
@@ -281,7 +281,7 @@ class Volumen2D:
     # RENDER DE UN CORTE
     # ==================================================================
     def render_corte(self, eje, indice, alto=512, clahe=True, unsharp=True,
-                     gamma=1.10, overlay=True, grosor_borde=GROSOR_BORDE):
+                     gamma=1.25, overlay=True, grosor_borde=GROSOR_BORDE):
         """Devuelve `(rgb_uint8, info)` del corte con el tumor encima.
 
         El resultado ya tiene el aspecto fisico corregido por el espaciado y
