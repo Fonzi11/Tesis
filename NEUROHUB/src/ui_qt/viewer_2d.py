@@ -769,6 +769,11 @@ class Viewer2D(QWidget):
             self._eje_pintando = None
             if self._volumen is not None and not self._volumen.vacio:
                 self._volumen.cerrar_trazo()
+            # Durante el arrastre solo se repinta la imagen para mantener la
+            # fluidez. Al terminar el trazo hay que sincronizar los controles:
+            # la máscara ya puede contener voxeles y el botón 3D debe
+            # habilitarse inmediatamente.
+            self._actualizar_visibilidad()
             self._actualizar_navegacion()
             return True
         return False
