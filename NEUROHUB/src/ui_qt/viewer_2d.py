@@ -99,6 +99,7 @@ class Viewer2D(QWidget):
         self._ultimo_voxel = None
         self._indice_pintando = None
         self._eje_pintando = None
+        self._delineado_con_lapiz = False
         self._overlay_visible = True
         self._bloqueando_slider = False
 
@@ -316,6 +317,7 @@ class Viewer2D(QWidget):
         cosas distintas sin avisar.
         """
         self._volumen = volumen
+        self._delineado_con_lapiz = False
         if volumen is None or volumen.vacio:
             self._indice = 0
             self._pixmap = QPixmap()
@@ -637,7 +639,11 @@ class Viewer2D(QWidget):
         self._btn_limpiar.setEnabled(hay_volumen)
         self._btn_guardar_mascara.setEnabled(hay_volumen)
         self._btn_cargar_mascara.setEnabled(hay_volumen)
-        self._btn_3d.setEnabled(hay_volumen)
+        self._btn_3d.setEnabled(
+            hay_volumen
+            and self._delineado_con_lapiz
+            and self._volumen.vóxeles_tumor() > 0
+        )
         for e, w in self._paginators.items():
             activo = hay_volumen or e in self._png
             w.setVisible(activo and e == self._eje_actual)
@@ -770,6 +776,7 @@ class Viewer2D(QWidget):
             uv0, uv1, kx, ky, radio=self._radio_voxel, valor=valor,
             registrar_historial=False)
         if n:
+            self._delineado_con_lapiz = True
             self.mascara_modificada.emit()
         self._refrescar(ajustar=False, solo_imagen=True)
 

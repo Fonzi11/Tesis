@@ -11,6 +11,7 @@ de vóxel escalonados y bloques desconectados. Exporta a STL y FBX.
 
 import os
 import sys
+import importlib
 import numpy as np
 from pathlib import Path
 
@@ -176,18 +177,36 @@ def _cargar_estructura(nombre, cfg, preferir_tumor=None):
     visor 2D y es lo que debe verse en 3D.
     """
     if nombre == "tumor":
-        if preferir_tumor and os.path.exists(preferir_tumor):
-            cargada = _cargar_mascara_externa(preferir_tumor)
-            if cargada is not None:
-                print(f"[SEG3D] tumor: máscara MANUAL -> {preferir_tumor}")
-                return cargada
+        if not preferir_tumor or not os.path.exists(preferir_tumor):
+            print("[SEG3D] tumor: se omite hasta que exista una "
+                  "delineación manual con lápiz.")
+            return None, None
+        cargada = _cargar_mascara_externa(preferir_tumor)
+        if cargada is None:
             print(f"[SEG3D] [!] La máscara manual {preferir_tumor} no se pudo "
-                  f"leer; se usa la automática.")
-        arr, img, usado = _cargar_tumor_plausible()
-        if arr is None:
-            print("[SEG3D] [!] tumor: sin máscara plausible (se omite).")
-        else:
-            print(f"[SEG3D] tumor: máscara usada -> {usado}")
+                  "leer; se omite el tumor.")
+            return None, None
+        arr, img = cargada
+        brain_path = os.path.join(os.path.dirname(preferir_tumor),
+                                  "brain.nii.gz")
+        if os.path.exists(brain_path):
+            brain = sitk.ReadImage(brain_path)
+            if (arr.shape != sitk.GetArrayFromImage(brain).shape
+                    or img.GetSpacing() != brain.GetSpacing()
+                    or img.GetOrigin() != brain.GetOrigin()
+                    or img.GetDirection() != brain.GetDirection()):
+                img = sitk.Resample(
+                    img, brain, sitk.Transform(), sitk.sitkNearestNeighbor,
+                    0, sitk.sitkUInt8)
+                arr = (sitk.GetArrayFromImage(img) > 0).astype(np.uint8)
+            brain_arr = (sitk.GetArrayFromImage(brain) > 0).astype(np.uint8)
+            if arr.shape == brain_arr.shape:
+                arr = (arr & brain_arr).astype(np.uint8)
+            if arr.sum() == 0:
+                print("[SEG3D] [!] La delineación manual no intersecta "
+                      "el cerebro; se omite para evitar un tumor flotante.")
+                return None, None
+        print(f"[SEG3D] tumor: máscara MANUAL -> {preferir_tumor}")
     else:
         arr, img = cargar_mascara(cfg["mascara"])
 
@@ -355,6 +374,11 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
                             print(f"[SEG3D] Error cargando STL {est_name}: {e}")
 
                 if resultados:
+                    if not (mascara_tumor and os.path.exists(mascara_tumor)):
+                        resultados.pop("tumor", None)
+                        tumor_stl = os.path.join(salida_dir, "tumor.stl")
+                        if os.path.exists(tumor_stl):
+                            os.remove(tumor_stl)
                     print(f"\n[SEG3D] [DONE] Se generaron {len(resultados)} estructuras con 3D Slicer")
                     return resultados
         except Exception as e:
@@ -391,7 +415,16 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
         sigma = cfg.get("sigma_smooth", 1.0)
         t_iter = cfg.get("taubin_iter", 45)
 
-        verts, faces = mascara_a_malla(mask_arr, spacing, smooth=sigma, taubin_iter=t_iter)
+        try:
+            calidad = importlib.import_module("calidad_mallas")
+            verts, faces = calidad.malla_alta_calidad(
+                mask_arr, spacing, estructura=nombre,
+                min_voxels=cfg.get("min_component_voxels", 0),
+                verbose=False,
+            )
+        except Exception:
+            verts, faces = mascara_a_malla(
+                mask_arr, spacing, smooth=sigma, taubin_iter=t_iter)
 
         if len(verts) == 0 or len(faces) == 0:
             print(f"[SEG3D] [!] {nombre}: malla vacía")
@@ -620,4 +653,3 @@ def exportar_para_unity(mri_path=None):
 if __name__ == "__main__":
     mri = os.path.join(DATA_DIR, "nifti", "MRBrainTumor1.nii.gz")
     exportar_para_unity(mri)
-

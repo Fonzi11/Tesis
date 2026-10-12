@@ -547,6 +547,23 @@ class MeshFromMaskWorker(QObject):
         if arr.sum() == 0:
             return False, "La máscara está vacía: no hay nada que reconstruir."
 
+        brain_path = os.path.join(os.path.dirname(self.mascara_path),
+                                  "brain.nii.gz")
+        if os.path.exists(brain_path):
+            brain = sitk.ReadImage(brain_path)
+            if (img.GetSize() != brain.GetSize()
+                    or img.GetSpacing() != brain.GetSpacing()
+                    or img.GetOrigin() != brain.GetOrigin()
+                    or img.GetDirection() != brain.GetDirection()):
+                img = sitk.Resample(
+                    img, brain, sitk.Transform(), sitk.sitkNearestNeighbor,
+                    0, sitk.sitkUInt8)
+                arr = (sitk.GetArrayFromImage(img) > 0).astype(np.uint8)
+            brain_arr = (sitk.GetArrayFromImage(brain) > 0).astype(np.uint8)
+            arr = (arr & brain_arr).astype(np.uint8)
+            if arr.sum() == 0:
+                return False, "La delineación manual no intersecta el cerebro."
+
         self.log.emit(f"Máscara: {int(arr.sum()):,} vóxeles, "
                       f"spacing {tuple(round(float(s), 3) for s in img.GetSpacing())}",
                       "INFO")

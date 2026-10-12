@@ -321,8 +321,14 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     verts, faces, _, _ = measure.marching_cubes(
         campo, level=0.5, spacing=(objetivo, objetivo, objetivo), method="lorensen")
     # Devuelve la malla a su posición original dentro del volumen recortado.
-    origen = np.array([recorte[0].start, recorte[1].start, recorte[2].start])
-    verts = verts + origen * objetivo
+    # El recorte vive en la rejilla original. Multiplicar por `objetivo`
+    # desplaza la anatomía cuando el spacing de entrada es anisotrópico.
+    origen_mm = np.array([
+        recorte[0].start * sz,
+        recorte[1].start * sy,
+        recorte[2].start * sx,
+    ])
+    verts = verts + origen_mm
 
     if len(verts) == 0 or len(faces) == 0:
         return (verts, faces, volumen_mm3) if devolver_volumen else (verts, faces)
