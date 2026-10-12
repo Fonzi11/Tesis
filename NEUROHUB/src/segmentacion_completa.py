@@ -251,6 +251,55 @@ def _cargar_mascara_externa(ruta):
     return arr, img
 
 
+def _restringir_craneo_a_cerebro(craneo, cerebro, spacing,
+                                 margen_mm=25.0):
+    """Elimina extension de cuello/columna de una mascara de cráneo.
+
+    En MRI TotalSegmentator puede devolver un componente conectado que baja
+    desde la base del cráneo hacia las vértebras. Esa región no corresponde a
+    la envolvente craneal que se exporta a Unity y produce un STL alargado.
+    La máscara cerebral proporciona una referencia anatómica del estudio; se
+    conserva el cráneo dentro de su caja física más un margen uniforme.
+    """
+    skull = np.asarray(craneo, dtype=bool)
+    brain = np.asarray(cerebro, dtype=bool)
+    if skull.shape != brain.shape or not skull.any() or not brain.any():
+        return skull.astype(np.uint8)
+
+    sx, sy, sz = (float(v) for v in spacing[:3])
+    margen_vox = np.ceil(
+        np.array([margen_mm / sz, margen_mm / sy, margen_mm / sx],
+                 dtype=float)).astype(int)
+    limites = []
+    for eje, margen in enumerate(margen_vox):
+        indices = np.flatnonzero(np.any(brain, axis=tuple(
+            i for i in range(3) if i != eje)))
+        limites.append((
+            max(0, int(indices.min()) - int(margen)),
+            min(skull.shape[eje], int(indices.max()) + int(margen) + 1),
+        ))
+
+    dentro = np.zeros_like(skull, dtype=bool)
+    dentro[
+        limites[0][0]:limites[0][1],
+        limites[1][0]:limites[1][1],
+        limites[2][0]:limites[2][1],
+    ] = True
+    resultado = skull & dentro
+    if not resultado.any():
+        return skull.astype(np.uint8)
+
+    if int(resultado.sum()) < max(1000, int(skull.sum() * 0.35)):
+        print("[SEG3D] Aviso: la restricción del cráneo eliminaría demasiada "
+              "anatomía; se conserva la máscara original.")
+        return skull.astype(np.uint8)
+    eliminados = int(skull.sum() - resultado.sum())
+    if eliminados:
+        print(f"[SEG3D] Cráneo: se eliminan {eliminados:,} voxels "
+              "fuera de la envolvente cerebral.")
+    return resultado.astype(np.uint8)
+
+
 # =============================================================================
 # RECONSTRUCCIÓN DE MALLAS 3D (MÁXIMA RESOLUCIÓN)
 # =============================================================================
@@ -347,7 +396,13 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
 
     # Hay delineado manual -> ruta nativa, que sí admite la máscara elegida.
     # Sin él, Slicer es más rápido y su geometría es equivalente.
-    usar_slicer = not (mascara_tumor and os.path.exists(mascara_tumor))
+    # Slicer lee directamente skull.nii.gz y no conoce la corrección
+    # anatómica aplicada abajo; para este caso se usa la ruta nativa.
+    usar_slicer = not (mascara_tumor and os.path.exists(mascara_tumor)) \
+        and not (
+            os.path.exists(os.path.join(SEG_AI_DIR, "brain.nii.gz"))
+            and os.path.exists(os.path.join(SEG_AI_DIR, "skull.nii.gz"))
+        )
 
     if usar_slicer and slicer_exe and os.path.exists(slicer_exe) \
             and os.path.exists(script_slicer):
@@ -409,17 +464,30 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
     for nombre, cfg in ESTRUCTURAS.items():
         arr, img = _cargar_estructura(nombre, cfg, preferir_tumor=mascara_tumor)
         if arr is not None:
-            mascaras[nombre] = (arr, img.GetSpacing())
+            mascaras[nombre] = (arr, img)
 
     if not mascaras:
         print("[SEG3D] [X] No se encontraron máscaras en salidas/segmentaciones_ai/")
         return {}
 
+    if "craneo" in mascaras and "cerebro" in mascaras:
+        craneo_arr, craneo_img = mascaras["craneo"]
+        cerebro_arr, _cerebro_img = mascaras["cerebro"]
+        craneo_arr = _restringir_craneo_a_cerebro(
+            craneo_arr, cerebro_arr, craneo_img.GetSpacing())
+        mascaras["craneo"] = (craneo_arr, craneo_img)
+        ruta_limpia = os.path.join(salida_dir, "skull_cleaned.nii.gz")
+        imagen_limpia = sitk.GetImageFromArray(craneo_arr.astype(np.uint8))
+        imagen_limpia.CopyInformation(craneo_img)
+        sitk.WriteImage(imagen_limpia, ruta_limpia, useCompression=True)
+        print(f"[SEG3D] [OK] Máscara craneal corregida guardada en {ruta_limpia}")
+
     for nombre, cfg in ESTRUCTURAS.items():
         if nombre not in mascaras:
             continue
 
-        mask_arr, spacing = mascaras[nombre]
+        mask_arr, mask_img = mascaras[nombre]
+        spacing = mask_img.GetSpacing()
         if mask_arr is None or mask_arr.sum() == 0:
             print(f"[SEG3D] [!] {nombre}: máscara vacía")
             continue

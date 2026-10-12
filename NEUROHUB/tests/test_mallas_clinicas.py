@@ -42,3 +42,18 @@ def test_tumor_no_se_genera_sin_delineacion_manual(monkeypatch, tmp_path):
     )
     assert arr is None
     assert img is None
+
+
+def test_craneo_se_restringe_a_envoltura_cerebral():
+    """Una extension conectada hacia cuello no debe entrar en el STL craneal."""
+    cerebro = np.zeros((40, 50, 60), dtype=np.uint8)
+    cerebro[20:36, 15:35, 20:40] = 1
+    craneo = np.zeros_like(cerebro)
+    craneo[2:36, 10:40, 15:45] = 1
+
+    resultado = segmentacion._restringir_craneo_a_cerebro(
+        craneo, cerebro, (1.0, 1.0, 1.0), margen_mm=3.0)
+
+    assert resultado[20, 15, 20]
+    assert not resultado[2, 20, 30]
+    assert resultado.sum() < craneo.sum()
