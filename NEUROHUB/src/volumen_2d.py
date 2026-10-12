@@ -17,8 +17,9 @@ Que resuelve
 
 2. Realce local. Un windowing global da contraste, pero las estructuras finas
    (cortex, edema) siguen apagadas. Se anade CLAHE por corte
-   (`skimage.exposure.equalize_adapthist`), que redistribuye el rango sin
-   mover los niveles globales, mas un realce de borde (unsharp) suave.
+   (`skimage.exposure.equalize_adapthist`) de forma contenida, mas un realce
+   de borde suave. La salida evita la gamma aclarada de la version anterior,
+   que saturaba el tejido y dificultaba ver lesiones.
 
 3. Overlay. El tumor se dibuja con relleno verde translucido y borde opaco,
    mezclado sobre la imagen ("alpha blending"), de modo que el tejido se ve a
@@ -222,7 +223,7 @@ class Volumen2D:
         return np.clip(x, 0.0, 1.0)
 
     @staticmethod
-    def _clahe(gris, kernel=48, clip=0.012):
+    def _clahe(gris, kernel=48, clip=0.008):
         """CLAHE por corte; si skimage no esta, devuelve la imagen tal cual."""
         try:
             from skimage import exposure
@@ -233,7 +234,7 @@ class Volumen2D:
             return gris
 
     @staticmethod
-    def _realzar_bordes(gris, sigma=0.8, peso=0.35):
+    def _realzar_bordes(gris, sigma=0.8, peso=0.20):
         """Unsharp mask: suma la version desenfocada para remarcar el relieve."""
         if peso <= 0:
             return gris
@@ -280,7 +281,7 @@ class Volumen2D:
     # RENDER DE UN CORTE
     # ==================================================================
     def render_corte(self, eje, indice, alto=512, clahe=True, unsharp=True,
-                     gamma=0.85, overlay=True, grosor_borde=GROSOR_BORDE):
+                     gamma=1.10, overlay=True, grosor_borde=GROSOR_BORDE):
         """Devuelve `(rgb_uint8, info)` del corte con el tumor encima.
 
         El resultado ya tiene el aspecto fisico corregido por el espaciado y
