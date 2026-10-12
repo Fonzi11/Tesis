@@ -52,21 +52,21 @@ os.makedirs(FBX_DIR, exist_ok=True)
 ESTRUCTURAS = {
     "cerebro": {
         "mascara": "brain.nii.gz",
-        "color": (0.83, 0.67, 0.62),      # Rosa grisáceo orgánico (#D4A69A)
+        "color": (0.54, 0.60, 0.67),      # Gris azulado compatible con MRI/CT
         "sigma_smooth": 0.8,
         "taubin_iter": 60,
         "min_component_voxels": 500,
     },
     "craneo": {
         "mascara": "skull.nii.gz",
-        "color": (0.91, 0.88, 0.83),      # Hueso marfil cálido (#E8E0D4)
+        "color": (0.82, 0.86, 0.90),      # Hueso neutro, sin dominante sepia
         "sigma_smooth": 0.6,
         "taubin_iter": 50,
         "min_component_voxels": 500,
     },
     "tumor": {
         "mascara": "tumor_brats.nii.gz",
-        "color": (0.75, 0.15, 0.43),      # Magenta/Crimson tumoral (#C0256E)
+        "color": (0.86, 0.18, 0.10),      # Rojo clínico de alto contraste
         "sigma_smooth": 0.8,
         "taubin_iter": 40,
         "min_component_voxels": 20,

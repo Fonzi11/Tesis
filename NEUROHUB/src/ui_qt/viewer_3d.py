@@ -128,7 +128,7 @@ class Viewer3D(QWidget):
         rim.SetColor(0.8, 0.85, 0.95)
         self._ren.AddLight(rim)
 
-        self._ren.SetAmbient(0.2, 0.2, 0.22)
+        self._ren.SetAmbient(0.12, 0.14, 0.17)
 
         self._interactor = QVTKRenderWindowInteractor(self._vtk_host)
         self._ren_win = self._interactor.GetRenderWindow()
@@ -457,10 +457,10 @@ class Viewer3D(QWidget):
         prop = actor.GetProperty()
         rgba = meta.get("color_rgba") or (0.55, 0.55, 0.55, 1.0)
         prop.SetColor(rgba[0], rgba[1], rgba[2])
-        prop.SetAmbient(0.28)
-        prop.SetDiffuse(0.72)
-        prop.SetSpecular(0.35)          # Mayor especularidad
-        prop.SetSpecularPower(64.0)     # Brillo puntuado (ultradetalle)
+        prop.SetAmbient(0.18)
+        prop.SetDiffuse(0.82)
+        prop.SetSpecular(0.12)
+        prop.SetSpecularPower(24.0)
         prop.SetInterpolationToPhong()  # Suavizado por normales
         prop.EdgeVisibilityOff()
         try:

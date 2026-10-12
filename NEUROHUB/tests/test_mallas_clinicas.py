@@ -57,3 +57,22 @@ def test_craneo_se_restringe_a_envoltura_cerebral():
     assert resultado[20, 15, 20]
     assert not resultado[2, 20, 30]
     assert resultado.sum() < craneo.sum()
+
+
+def test_malla_remuestrea_spacing_mas_fino_sin_alargar_ejes():
+    """El spacing inferior al objetivo debe conservar las dimensiones fisicas."""
+    mask = np.zeros((30, 30, 30), dtype=np.uint8)
+    mask[8:22, 7:23, 6:24] = 1
+
+    verts, _ = calidad.malla_alta_calidad(
+        mask,
+        (0.4, 0.4, 0.2),
+        estructura="tumor",
+        min_voxels=0,
+        perfil={"sigma_mm": 0.0, "taubin_iter": 0},
+    )
+
+    extension = verts.max(axis=0) - verts.min(axis=0)
+    assert extension[0] < 9.0
+    assert extension[1] < 9.0
+    assert extension[2] < 5.0

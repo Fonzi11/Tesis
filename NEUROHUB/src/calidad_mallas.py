@@ -275,7 +275,11 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
     # para que cada eje reciba su propio factor.
     sx, sy, sz = [float(v) for v in spacing[:3]]
     factores = [sz / objetivo, sy / objetivo, sx / objetivo]
-    refinado = any(f > 1.05 for f in factores)
+    # La malla se extrae siempre con spacing isotropo `objetivo`. Por tanto,
+    # tambien hay que remuestrear cuando el volumen original es mas fino que
+    # el objetivo; omitir ese caso interpreta, por ejemplo, un voxel de 0.2 mm
+    # como 0.6 mm y alarga la anatomia en ese eje.
+    refinado = any(abs(f - 1.0) > 0.05 for f in factores)
 
     campo = datos.astype(np.float32)
     # El sigma se aplica SIEMPRE en milímetros reales, nunca en vóxeles. En la

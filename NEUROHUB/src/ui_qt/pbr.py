@@ -1,33 +1,32 @@
 """
 Materiales PBR de las estructuras segmentadas.
 
-Se extraen tal cual de `main.py` (PBR_COLORS / PBR_ALIASES / resolve_pbr) para
-que el nuevo visor 3D pinte EXACTAMENTE igual que el anterior. Moverlos aqui
-evita que el visor tenga que importar `main.py` (que construiria la app Tk al
-importarse).
+La paleta es deliberadamente neutra y de baja especularidad: no intenta
+colorear una MRI/CT como una radiografia sepia, sino separar estructuras sin
+alterar la lectura espacial de la anatomia.
 """
 
 PBR_COLORS = {
     "cerebro": dict(
-        color_rgba=(0.76, 0.60, 0.58, 0.85),
-        roughness=0.75, metallic=0.0,
+        color_rgba=(0.54, 0.60, 0.67, 0.85),
+        roughness=0.88, metallic=0.0,
         emission=(0, 0, 0, 1), subsurface=0.35,
-        subsurface_color=(0.9, 0.45, 0.35, 1.0),
-        display="#C99A91", label="Cerebro",
+        subsurface_color=(0.55, 0.64, 0.75, 1.0),
+        display="#8A9AAF", label="Cerebro",
     ),
     "craneo": dict(
-        color_rgba=(0.92, 0.88, 0.78, 1.0),
-        roughness=0.85, metallic=0.0,
+        color_rgba=(0.82, 0.86, 0.90, 1.0),
+        roughness=0.92, metallic=0.0,
         emission=(0, 0, 0, 1), subsurface=0.08,
-        subsurface_color=(1.0, 0.95, 0.80, 1.0),
-        display="#EAE0C7", label="Cráneo",
+        subsurface_color=(0.82, 0.88, 0.95, 1.0),
+        display="#D1DCE8", label="Cráneo",
     ),
     "tumor": dict(
-        color_rgba=(0.40, 0.00, 0.90, 1.0),
-        roughness=0.45, metallic=0.0,
-        emission=(0.30, 0.00, 0.60, 1.0), subsurface=0.10,
-        subsurface_color=(0.6, 0.1, 0.8, 1.0),
-        display="#6600E6", label="Tumor",
+        color_rgba=(0.86, 0.18, 0.10, 1.0),
+        roughness=0.62, metallic=0.0,
+        emission=(0.08, 0.00, 0.00, 1.0), subsurface=0.05,
+        subsurface_color=(0.95, 0.25, 0.12, 1.0),
+        display="#DB321F", label="Tumor",
     ),
     "aneurisma": dict(
         color_rgba=(1.00, 0.55, 0.00, 1.0),
