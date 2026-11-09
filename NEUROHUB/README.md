@@ -20,6 +20,10 @@ D:\Tesis\.venv\Scripts\python.exe launcher.py doctor
 D:\Tesis\.venv\Scripts\python.exe launcher.py ui
 ```
 
+La integración Unity/MR está en [`unity/NeuroHubMR`](unity/NeuroHubMR). El
+proyecto contiene la escena, scripts, manifiestos y configuración XR; los FBX
+clínicos y la carpeta `Library/` se generan localmente y no se versionan.
+
 > **Interfaz legacy.** `main.py` (tkinter + pygame) se conserva como
 > referencia histórica y ya **no** es el punto de entrada. Sus dependencias
 > (`customtkinter`, `pygame`) son opcionales.
@@ -247,6 +251,25 @@ porque es la que mejor muestra edema y tumor realzado. Las máscaras
 La máscara que se superpone debe **compartir rejilla** con el volumen; si no,
 se avisa por consola y el visor carga la imagen **sin máscara** para que el
 delineado manual siga siendo posible.
+
+## 📊 Informes y ejecuciones reproducibles
+
+Cada pipeline escribe sus mallas en una carpeta con identificador temporal:
+
+```text
+salidas/
+├── mallas/<sujeto>/<ejecucion>/
+└── informes/<sujeto>/<ejecucion>/
+    ├── indice.json
+    ├── fs_cortex.json
+    ├── fs_cortex.md
+    └── ...
+```
+
+Las ejecuciones anteriores se conservan. Los informes documentan operaciones,
+resolución voxel, dimensiones, voxeles segmentados, volumen, vértices, caras,
+tamaño de archivo y tiempos. El coeficiente Dice solo se calcula contra una
+referencia independiente compatible; en otro caso se marca como `N/A`.
 
 ## 🧩 Segmentación Completa
 

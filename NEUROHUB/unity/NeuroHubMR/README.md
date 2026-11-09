@@ -19,6 +19,19 @@ el proveedor exponga seguimiento de manos.
 El manifiesto conserva el identificador de estudio y los colores/opacidades de
 cada estructura. No mezcla modelos entre estudios.
 
+## FreeSurfer y tumor
+
+Los manifiestos generados por NEUROHUB pueden incluir las estructuras ASEG de
+FreeSurfer como modelos independientes (`fs_cortex`, `fs_white_matter`,
+`fs_cerebellum`, `fs_brainstem`, `fs_thalamus`, `fs_basal_ganglia`,
+`fs_hippocampus` y `fs_ventricles`). La corteza y la sustancia blanca usan
+opacidad reducida para mantener visible el tumor y las estructuras profundas.
+
+El tumor solo se carga junto al atlas FreeSurfer cuando ambas máscaras están
+registradas en el mismo espacio físico. Esto evita presentar una
+superposición anatómica incorrecta. Cada estudio conserva su propio manifiesto
+y sus assets generados localmente.
+
 ## Gestos
 
 - Arrastre de mano: rotación.

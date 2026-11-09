@@ -26,6 +26,26 @@ Segmentación y modelado 3D de neuroimágenes para diagnóstico asistido por IA.
 - **`herramientas/`** — Utilidades (preview, FBX único, validación, verificación)
 - **`archivo/`** — Material histórico / residual (modelos antiguos, debug)
 
+## 🧠 FreeSurfer + Mixed Reality
+
+NEUROHUB integra FreeSurfer 7.4.1 mediante WSL (`Ubuntu-22.04`) para procesar
+estudios T1 y exportar el atlas `aseg` a estructuras 3D coloreables:
+
+- Corteza, sustancia blanca, cerebelo, tronco cerebral, tálamo, ganglios
+  basales, hipocampo y ventrículos.
+- Cerebro semitransparente y tumor destacado cuando la máscara tumoral
+  pertenece al mismo espacio físico del estudio.
+- Exportación de modelos independientes para Unity/OpenXR y realidad
+  aumentada.
+- Ejecuciones versionadas: las mallas nuevas no sobrescriben las anteriores.
+- Informes `.md` y `.json` por modelo con resolución, dimensiones, vértices,
+  caras, volumen, operaciones, tiempos y Dice cuando existe ground truth
+  compatible.
+
+Los datos clínicos, licencias, mallas y resultados generados permanecen fuera
+del repositorio. Consulta la guía completa en
+[`NEUROHUB/README.md`](NEUROHUB/README.md).
+
 ## 🚀 Inicio rápido
 
 Un único punto de entrada para todo. Desde `NEUROHUB/`:
