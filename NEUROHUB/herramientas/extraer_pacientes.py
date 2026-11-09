@@ -18,6 +18,7 @@ Uso
 import argparse
 import io
 import os
+import re
 import sys
 import zipfile
 
@@ -33,6 +34,26 @@ RAIZ_ZIPS = os.path.join(BASE_DIR, "data")
 def _normaliza(nombre):
     """Convierte `carpeta\\archivo.dcm` en un nombre plano de archivo."""
     return nombre.replace("\\", "/").split("/")[-1]
+
+
+def _slug(nombre):
+    """Nombre estable para agrupar casos sin depender del nombre de Drive."""
+    nombre = os.path.splitext(os.path.basename(str(nombre)))[0].lower()
+    nombre = re.sub(r"[^a-z0-9]+", "_", nombre).strip("_")
+    return nombre or "sin_nombre"
+
+
+def _destino_caso(grupo, archivo):
+    """Agrupa por etiqueta visible y por estudio, evitando colisiones.
+
+    Antes todos los ZIP acababan en `pacientes/<zip_stem>`. Eso separaba el
+    contexto `Tumor 1`/`Aneurisma 2` y podía mezclar o sobrescribir estudios
+    descargados en varias partes. Cada adquisición queda ahora en su propia
+    carpeta `tumor_1__890923`.
+    """
+    etiqueta = _slug(os.path.basename(grupo))
+    estudio = _slug(archivo[:-4])
+    return os.path.join(DESTINO, f"{etiqueta}__{estudio}")
 
 
 def indexar_zip(ruta_zip):
@@ -60,14 +81,21 @@ def indexar_zip(ruta_zip):
                 if not members:
                     print(f"  [!] {archivo}: no contiene cortes .dcm")
                     continue
-                carpeta = os.path.join(DESTINO, archivo[:-4])
+                carpeta = _destino_caso(grupo, archivo)
                 if _cuenta(carpeta) != len(members):
                     os.makedirs(carpeta, exist_ok=True)
-                    for m in members:
-                        destino = os.path.join(carpeta, _normaliza(m))
+                    usados = set(os.listdir(carpeta))
+                    for pos, m in enumerate(members, start=1):
+                        nombre_dcm = _normaliza(m)
+                        destino_nombre = nombre_dcm
+                        if destino_nombre in usados:
+                            raiz, ext = os.path.splitext(nombre_dcm)
+                            destino_nombre = f"{raiz}__{pos}{ext}"
+                        destino = os.path.join(carpeta, destino_nombre)
                         if not os.path.isfile(destino):
                             with open(destino, "wb") as salida:
                                 salida.write(interno.read(m))
+                        usados.add(destino_nombre)
                 encontrados.append(
                     (grupo, archivo, carpeta, len(members)))
     return encontrados

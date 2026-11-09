@@ -6,12 +6,16 @@ mas se equivoca cuando el pipeline cambia) en un unico modulo sin Qt, de modo
 que tanto la ventana principal como el visor 3D consulten exactamente las
 mismas carpetas.
 
-Rutas canonicas (identicas a las de `main.py` y `segmentacion_completa`):
+Rutas de compatibilidad del modo legacy:
 
     <raiz>/salidas/mallas              -> STL de maxima resolucion
     <raiz>/salidas/fbx                 -> FBX de exportacion
     <raiz>/salidas/segmentaciones_ai   -> NIfTI de las segmentaciones
     <raiz>/salidas/segmentaciones_ai/vistas_2d -> PNG de los cortes
+
+Cuando la interfaz Qt tiene un estudio activo, las mismas subcarpetas se
+resuelven bajo la carpeta del estudio. Esto evita que dos estudios compartan
+STL, máscaras o cortes.
 """
 
 import os
@@ -33,7 +37,9 @@ MODELOS_DIR = os.path.join(RAIZ_DIR, "archivo", "modelos_3d")
 # Orden en que se dibujan las estructuras: primero las envolventes
 # (craneo, cerebro) y despues las internas (tumor, aneurisma), que es
 # como se presenta el caso en las Reuniones de Neuroimagen.
-ORDEN_ESTRUCTURAS = ["craneo", "cerebro", "tumor", "aneurisma"]
+ORDEN_ESTRUCTURAS = [
+    "craneo", "cerebro", "vasos", "arterias", "venas", "tumor", "aneurisma",
+]
 
 
 def existe(path):
@@ -62,12 +68,8 @@ def escanear_mallas(dirs=None, fbx_dir=None):
     from .pbr import resolve_pbr
 
     modelos = {}
-    IGNORED_KEYS = {"arterias", "venas", "vasos", "venas_arterias", "arteries", "veins", "vessels"}
-
     def _add(stl_path, name, fbx=None):
         key = os.path.splitext(name)[0].lower()
-        if key in IGNORED_KEYS:
-            return
         meta = resolve_pbr(key)
         modelos[key] = {
             "fbx": fbx,
@@ -78,7 +80,19 @@ def escanear_mallas(dirs=None, fbx_dir=None):
             "color_rgba": meta.get("color_rgba", (0.6, 0.6, 0.6, 1.0)),
         }
 
-    for d in (dirs or [MALLAS_DIR, MODELOS_DIR]):
+    directorios = list(dirs or [MALLAS_DIR, MODELOS_DIR])
+    # Cada ejecución nueva puede vivir en una subcarpeta versionada. Solo se
+    # muestra la más reciente para no mezclar pacientes, conservando las
+    # mallas antiguas en disco y evitando sobrescribirlas.
+    for index, d in list(enumerate(directorios)):
+        if d == MALLAS_DIR and existe(d):
+            subdirs = []
+            for root, _names, files in os.walk(d):
+                if any(f.lower().endswith(".stl") for f in files):
+                    subdirs.append(root)
+            if subdirs:
+                directorios[index] = max(subdirs, key=os.path.getmtime)
+    for d in directorios:
         if not existe(d):
             continue
         for f in sorted(os.listdir(d)):
@@ -129,8 +143,9 @@ def rutas_serie(study_dir=None):
             "fbx": FBX_DIR,
             "slices": SLICES_DIR,
         }
+    study_dir = os.path.abspath(study_dir)
     return {
-        "estudio": os.path.abspath(study_dir),
+        "estudio": study_dir,
         "segmentaciones": os.path.join(study_dir, "segmentaciones_ai"),
         "mallas": os.path.join(study_dir, "mallas"),
         "fbx": os.path.join(study_dir, "fbx"),
@@ -326,6 +341,9 @@ NOMBRES_MASCARA_TUMOR = (
     "tumor_heuristica.nii.gz",
     "tumor_heur.nii.gz",
     "tumor.nii.gz",
+    # FreeSurfer ASEG es multietiqueta; se incluye como capa de visualización
+    # 2D (el visor la convierte a máscara no nula) sin tratarla como tumor.
+    "freesurfer_aseg.nii.gz",
 )
 
 

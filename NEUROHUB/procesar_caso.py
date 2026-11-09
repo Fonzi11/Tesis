@@ -30,6 +30,7 @@ import argparse
 import os
 import sys
 import time
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(BASE_DIR)
@@ -147,9 +148,12 @@ def main():
         if nombre.lower().endswith(sufijo):
             nombre = nombre[: -len(sufijo)]
             break
-    trabajo = args.salida or os.path.join(RAIZ, "salidas", f"caso_{nombre}")
+    trabajo = args.salida or os.path.join(
+        RAIZ, "salidas", f"caso_{nombre}",
+        datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
     seg_dir = os.path.join(trabajo, "segmentaciones")
     mallas_dir = os.path.join(trabajo, "mallas")
+    informes_dir = os.path.join(trabajo, "informes")
     renders_dir = os.path.join(trabajo, "renders")
 
     print("=" * 70)
@@ -170,7 +174,23 @@ def main():
 
     print("\nGenerando renders...")
     import render_caso
+    render_inicio = time.perf_counter()
     render_caso.generar(mallas_dir, renders_dir)
+    render_tiempo = time.perf_counter() - render_inicio
+    from informes_modelos import generar_informes
+    generar_informes(
+        mallas_dir, informes_dir,
+        mascaras={k: v for k, v in mascaras.items() if k in resumen},
+        volumen=args.nifti,
+        tiempo_renderizado_s=render_tiempo,
+        operaciones=[
+            "Detección de modalidad.",
+            "Segmentación anatómica y tumoral.",
+            "Reconstrucción marching cubes de alta calidad.",
+            "Suavizado y control de rugosidad.",
+            "Renderizado de vistas clínicas.",
+            "Persistencia en carpeta versionada; no se sobrescribieron mallas.",
+        ])
 
     print("\n" + "=" * 70)
     print(f"Completado en {time.time() - inicio:.1f}s")
@@ -183,4 +203,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -114,6 +114,23 @@ QPushButton {{
 }}
 QPushButton:hover {{ background-color: {COLOR_HOVER}; }}
 QPushButton:pressed {{ background-color: {COLOR_SELECCION}; }}
+QPushButton#headerAction {{
+    background-color: transparent;
+    border: 1px solid {COLOR_BORDE};
+    border-radius: 7px;
+    padding: 5px 10px;
+    min-height: 22px;
+}}
+QPushButton#headerAction:hover {{
+    background-color: {COLOR_PANEL_ALT};
+    border-color: {COLOR_ACENTO};
+}}
+QPushButton#headerAction:pressed {{ background-color: {COLOR_SELECCION}; }}
+QPushButton#headerAction:disabled {{
+    color: {COLOR_TEXTO_SEC};
+    background-color: transparent;
+    border-color: {COLOR_PANEL_ALT};
+}}
 QPushButton:disabled {{
     color: {COLOR_TEXTO_SEC};
     background-color: {COLOR_PANEL};

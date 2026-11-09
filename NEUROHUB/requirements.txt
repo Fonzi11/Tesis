@@ -24,6 +24,8 @@ fast-simplification>=0.1.7
 # --- Datos médicos y procesamiento ---
 SimpleITK>=2.3
 nibabel>=5.0
+pydicom>=3.0
+highdicom>=0.24
 numpy>=1.26
 scipy>=1.11
 scikit-image>=0.21

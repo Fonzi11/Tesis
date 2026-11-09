@@ -40,23 +40,24 @@ SEG_AI_DIR = os.path.join(RAIZ, "salidas", "segmentaciones_ai")
 MALLAS_DIR = os.path.join(RAIZ, "salidas", "mallas")
 
 
-# Estructuras del pipeline: SOLO cerebro, cráneo y tumor.
-# La vasculatura (vasos, arterias, venas, aneurisma) se eliminó del producto:
-# una MRI anatómica no permite separar arterias de venas con fiabilidad, y en MR
-# las venas no se distinguishen del resto del árbol vascular, así que esa capa
-# no aportaba información verificable.
+# La vasculatura se conserva cuando existe una máscara vascular validada.
+# Separar arterias y venas requiere secuencias angiográficas independientes;
+# no se infiere desde una RM anatómica.
 ESTRUCTURAS = [
     {"clave": "cerebro",  "mascaras": ["brain.nii.gz"],              "min_voxels": 500},
     {"clave": "craneo",   "mascaras": ["skull.nii.gz"],              "min_voxels": 500},
     {"clave": "tumor",    "mascaras": ["tumor_brats.nii.gz",
                                         "tumor_heuristica.nii.gz",
                                         "tumor.nii.gz"],               "min_voxels": 20},
+    {"clave": "vasos",    "mascaras": ["vasos.nii.gz", "vessels.nii.gz",
+                                        "vascular.nii.gz"],             "min_voxels": 3},
 ]
 
 COLORES = {
     "cerebro":   (0.83, 0.67, 0.62),
     "craneo":    (0.91, 0.88, 0.83),
     "tumor":     (0.75, 0.15, 0.43),
+    "vasos":     (0.92, 0.12, 0.10),
 }
 
 
@@ -141,7 +142,8 @@ def reconstruir_todas(estructuras=None, salida_dir=None, verbose=True):
     return mallas
 
 
-# Umbral de rugosidad admitido. Las tres estructuras comparten umbral porque
+# Umbral de rugosidad admitido. Las estructuras comparten método, pero los
+# vasos conservan un perfil más fino para no borrar ramas pequeñas.
 # comparten método: cerebro, cráneo y tumor son masas reconstruidas con la
 # misma rejilla y el mismo suavizado, así que su acabado debe ser comparable.
 UMBRAL_RUGOSIDAD = {

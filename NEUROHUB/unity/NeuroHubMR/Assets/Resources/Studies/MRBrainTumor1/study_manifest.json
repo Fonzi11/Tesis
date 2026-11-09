@@ -1,0 +1,125 @@
+{
+  "schema": "neurohub-mr-study-v1",
+  "studyId": "MRBrainTumor1",
+  "sourceDirectory": "D:\\Tesis\\salidas\\freesurfer\\MRBrainTumor1",
+  "generatedAtUtc": "2026-11-09T12:02:23.060564+00:00",
+  "models": [
+    {
+      "color": [
+        0.7,
+        0.7,
+        0.7,
+        1.0
+      ],
+      "opacity": 0.8,
+      "id": "freesurfer_lh_white",
+      "file": "freesurfer_lh_white.fbx"
+    },
+    {
+      "color": [
+        0.7,
+        0.7,
+        0.7,
+        1.0
+      ],
+      "opacity": 0.8,
+      "id": "freesurfer_rh_white",
+      "file": "freesurfer_rh_white.fbx"
+    },
+    {
+      "color": [
+        0.12,
+        0.75,
+        0.88,
+        1.0
+      ],
+      "opacity": 0.92,
+      "id": "fs_basal_ganglia",
+      "file": "fs_basal_ganglia.fbx"
+    },
+    {
+      "color": [
+        0.95,
+        0.3,
+        0.18,
+        1.0
+      ],
+      "opacity": 0.92,
+      "id": "fs_brainstem",
+      "file": "fs_brainstem.fbx"
+    },
+    {
+      "color": [
+        0.95,
+        0.72,
+        0.12,
+        1.0
+      ],
+      "opacity": 0.88,
+      "id": "fs_cerebellum",
+      "file": "fs_cerebellum.fbx"
+    },
+    {
+      "color": [
+        0.32,
+        0.82,
+        0.45,
+        1.0
+      ],
+      "opacity": 0.45,
+      "id": "fs_cortex",
+      "file": "fs_cortex.fbx"
+    },
+    {
+      "color": [
+        0.95,
+        0.28,
+        0.62,
+        1.0
+      ],
+      "opacity": 0.92,
+      "id": "fs_hippocampus",
+      "file": "fs_hippocampus.fbx"
+    },
+    {
+      "color": [
+        0.77,
+        0.26,
+        0.88,
+        1.0
+      ],
+      "opacity": 0.92,
+      "id": "fs_thalamus",
+      "file": "fs_thalamus.fbx"
+    },
+    {
+      "color": [
+        0.96,
+        0.96,
+        0.96,
+        1.0
+      ],
+      "opacity": 0.55,
+      "id": "fs_ventricles",
+      "file": "fs_ventricles.fbx"
+    },
+    {
+      "color": [
+        0.35,
+        0.62,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.32,
+      "id": "fs_white_matter",
+      "file": "fs_white_matter.fbx"
+    }
+  ],
+  "clinicalReviewRequired": true,
+  "renderProfile": {
+    "pipeline": "URP",
+    "antiAliasing": 4,
+    "gpuInstancing": true,
+    "asyncLoad": true
+  }
+}

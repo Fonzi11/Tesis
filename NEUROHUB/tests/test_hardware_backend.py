@@ -23,6 +23,18 @@ def test_cpu_es_un_fallback_disponible():
     assert backends["cpu"].provider == "CPUExecutionProvider"
 
 
+def test_directml_se_publica_solo_si_el_runtime_puede_crear_sesion(monkeypatch):
+    module = _backend()
+    monkeypatch.setattr(
+        module,
+        "_directml_runtime_check",
+        lambda: (True, "sesión de prueba"),
+    )
+    backends = {b.name: b for b in module.detect_inference_backends()}
+    assert backends["amd-directml"].available is True
+    assert backends["amd-directml"].reason == "sesión de prueba"
+
+
 def test_directml_selecciona_cpu_como_fallback(monkeypatch):
     module = _backend()
     monkeypatch.setattr(

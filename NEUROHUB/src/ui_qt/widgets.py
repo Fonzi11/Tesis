@@ -242,38 +242,61 @@ class LogConsole(QTextEdit):
 class Card(QFrame):
     """Tarjeta compacta de estado (equivalente a StatusCard de main.py)."""
 
-    def __init__(self, titulo, valor="—", parent=None):
+    def __init__(self, titulo, valor="—", parent=None, accent=None):
         super().__init__(parent)
+        self._accent = accent or COLOR_ACENTO
+        self.setObjectName("statusCard")
         self.setStyleSheet(
-            f"QFrame {{ background-color: {COLOR_PANEL_ALT};"
-            f" border: 1px solid {COLOR_BORDE}; border-radius: 9px; }}"
-            f"QFrame:hover {{ border-color: {COLOR_ACENTO}; }}")
+            f"QFrame#statusCard {{ background-color: {COLOR_PANEL_ALT};"
+            f" border: 1px solid {COLOR_BORDE}; border-radius: 10px; }}"
+            f"QFrame#statusCard:hover {{ border-color: {self._accent}; }}"
+        )
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 9, 12, 9)
-        lay.setSpacing(2)
+        lay.setContentsMargins(13, 8, 12, 8)
+        lay.setSpacing(1)
+
+        self._stripe = QFrame()
+        self._stripe.setFixedWidth(3)
+        self._stripe.setStyleSheet(
+            f"background-color: {self._accent}; border: none; "
+            "border-radius: 1px;")
 
         self._titulo = QLabel(titulo)
         self._titulo.setStyleSheet(
-            f"color: {COLOR_TEXTO_SEC}; font-size: 10px; border: none;")
+            f"color: {COLOR_TEXTO_SEC}; font-size: 9px; font-weight: 600;"
+            " letter-spacing: 1px; border: none;")
         self._valor = QLabel(valor)
         self._valor.setStyleSheet(
-            f"color: {COLOR_ACENTO}; font-size: 16px; font-weight: bold;"
+            f"color: {self._accent}; font-size: 17px; font-weight: bold;"
             f" border: none;")
         self._detalle = QLabel("")
         self._detalle.setStyleSheet(
             f"color: {COLOR_TEXTO_SEC}; font-size: 9px; border: none;")
         self._detalle.setWordWrap(True)
 
-        lay.addWidget(self._titulo)
-        lay.addWidget(self._valor)
-        lay.addWidget(self._detalle)
+        contenido = QVBoxLayout()
+        contenido.setContentsMargins(0, 0, 0, 0)
+        contenido.setSpacing(1)
+        contenido.addWidget(self._titulo)
+        contenido.addWidget(self._valor)
+        contenido.addWidget(self._detalle)
+
+        fila = QHBoxLayout()
+        fila.setContentsMargins(0, 0, 0, 0)
+        fila.setSpacing(8)
+        fila.addWidget(self._stripe)
+        fila.addLayout(contenido, 1)
+        lay.addLayout(fila)
 
     def set_value(self, valor, color=None, detalle=None):
         self._valor.setText(valor)
         if color:
             self._valor.setStyleSheet(
-                f"color: {color}; font-size: 16px; font-weight: bold;"
+                f"color: {color}; font-size: 17px; font-weight: bold;"
                 f" border: none;")
+            self._stripe.setStyleSheet(
+                f"background-color: {color}; border: none; "
+                "border-radius: 1px;")
         if detalle is not None:
             self._detalle.setText(detalle)

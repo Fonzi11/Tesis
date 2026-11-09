@@ -52,6 +52,14 @@ la adquisición volumétrica principal).
 **Archivo NIfTI...** queda disponible para cargar un volumen `.nii`/`.nii.gz`
 o un DICOM individual.
 
+El botón **FreeSurfer (aseg)** aparece en el mismo panel y procesa el estudio
+activo, incluyendo estudios DICOM que NEUROHUB pueda convertir a NIfTI. En
+cada ejecución solicita el `license.txt`, crea un sujeto independiente bajo
+`salidas\freesurfer\subjects` y guarda `freesurfer_aseg.nii.gz` dentro de la
+carpeta `segmentaciones_ai` del estudio. FreeSurfer requiere una imagen
+anatómica 3D T1/T1w; estudios CT, angiográficos o volúmenes 4D sin un volumen
+anatómico T1 adecuado se rechazan explícitamente, sin modificar el original.
+
 Para procesar DICOM de pacientes y generar el modelo 3D:
 
 ```bat
@@ -61,12 +69,75 @@ D:\Tesis\.venv\Scripts\python.exe herramientas\convertir_paciente.py 890923
 D:\Tesis\.venv\Scripts\python.exe procesar_caso.py D:\Tesis\data\nifti\pacientes\890923.nii.gz
 ```
 
+La extracción conserva la separación de los estudios descargados desde
+Google Drive. Cada adquisición queda en
+`data\dicom\pacientes\<tipo>_<numero>__<identificador>`, por ejemplo
+`tumor_1__890923` o `aneurisma_4__804508`. Así, dos exportaciones del mismo
+tipo no se mezclan aunque pertenezcan a descargas distintas. Los DICOM se
+extraen planos dentro de esa carpeta para que SimpleITK pueda detectar todas
+las series. Los ZIP corruptos o truncados se informan y no se presentan como
+estudios válidos; deben reemplazarse con una nueva descarga.
+Las extracciones anteriores se conservan, sin mezclarse, en
+`data\dicom\pacientes_legacy`.
+
 El último comando genera máscaras, mallas y renders bajo `D:\Tesis\salidas`.
 La interfaz Qt usa por defecto la máxima resolución de TotalSegmentator (sin
 `--fast`) para conservar detalle en los bordes del cerebro y el cráneo. Para
 casos grandes puedes añadir `--rapido`, aceptando una resolución aproximada de
 3 mm y menor detalle. `launcher.py doctor` informa si Docker/Raidionics está disponible, pero
 Docker no es necesario para el visor ni para el pipeline principal.
+
+### FreeSurfer opcional
+
+NEUROHUB puede ejecutar FreeSurfer sin convertirlo en una dependencia de
+Python. En Windows se recomienda instalarlo dentro de WSL, configurar
+`FREESURFER_WSL_DISTRO` si hay varias distribuciones y comprobar el entorno:
+
+```bat
+set FREESURFER_WSL_DISTRO=Ubuntu-22.04
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer estado
+```
+
+Operaciones disponibles:
+
+```bat
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer recon-all ^
+  D:\Tesis\data\nifti\pacientes\caso.nii.gz caso01 ^
+  --subjects-dir D:\Tesis\salidas\freesurfer\subjects ^
+  --licencia D:\Tesis\license.txt ^
+  --log D:\Tesis\salidas\freesurfer\caso01.log
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer estadisticas caso01 ^
+  --subjects-dir D:\Tesis\salidas\freesurfer\subjects ^
+  --salida D:\Tesis\salidas\freesurfer\stats
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer mascara caso01 ^
+  --subjects-dir D:\Tesis\salidas\freesurfer\subjects ^
+  --etiqueta 17 --salida D:\Tesis\salidas\segmentaciones_ai\hipocampo.nii.gz
+```
+
+Para usar directamente la segmentación anatómica FreeSurfer dentro de
+NEUROHUB, `segmentar` ejecuta `recon-all` y exporta `aseg.mgz` como NIfTI en
+`salidas\segmentaciones_ai`:
+
+```bat
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer segmentar ^
+  D:\Tesis\data\nifti\pacientes\caso.nii.gz caso01 ^
+  --subjects-dir D:\Tesis\salidas\freesurfer\subjects ^
+  --licencia D:\Tesis\license.txt ^
+  --log D:\Tesis\salidas\freesurfer\caso01.log
+```
+
+También se admite una instalación nativa si `recon-all` está en `PATH` o
+`FREESURFER_HOME` apunta a ella. FreeSurfer requiere su licencia propia; el
+proyecto no incluye ni descarga licencias.
+
+Al terminar `FreeSurfer (aseg)`, NEUROHUB reconstruye las estructuras ASEG
+coloreables y las guarda sin sobrescribir ejecuciones anteriores en
+`salidas\mallas\<sujeto>\<ejecucion>`. El tumor solo se incorpora si su máscara
+ocupa el mismo espacio físico que el atlas FreeSurfer; si no, se conserva como
+salida independiente y el informe explica que hace falta registrar la máscara
+al mismo estudio. Los informes detallados quedan en
+`salidas\informes\<sujeto>\<ejecucion>`, con Dice únicamente cuando existe una
+referencia independiente compatible.
 
 ## 🖥️ Tecnologías
 
@@ -113,6 +184,17 @@ salidas/
 workspace (`D:\Tesis`) porque contienen datos clínicos, pesos grandes y
 resultados generados. El código y las herramientas viven en esta carpeta
 `NEUROHUB/`; no hay que duplicarlos ni ejecutar copias antiguas desde la raíz.
+
+### Versionado de mallas e informes
+
+Cada ejecución de segmentación crea una carpeta nueva con marca temporal bajo
+`salidas\mallas\<estudio>\<ejecucion>` y `salidas\informes\<estudio>\<ejecucion>`.
+Las mallas anteriores no se eliminan ni se sobrescriben; el visor selecciona
+automáticamente la ejecución más reciente. Cada modelo dispone de un informe
+`.md` y `.json` con operaciones, dimensiones, resolución, voxeles, volumen,
+vértices, caras, tamaño de archivo, tiempo de renderizado y Dice cuando existe
+una referencia independiente compatible. Si no hay ground truth, Dice aparece
+como `N/A` y se explica el motivo; no se fabrica una métrica clínica.
 
 ## 🖌️ Visor 2D y delineado de tumor
 
@@ -211,22 +293,34 @@ máscara `tumor_heur.nii.gz` con volumen reportado en cm³.
 ### Backend AMD Radeon
 
 La Radeon se detecta mediante `DmlExecutionProvider` de ONNX Runtime, no
-mediante `torch.cuda` ni `nvidia-smi`. La aceleración de render VTK/OpenGL es
-independiente de la inferencia. El visor 3D usa la GPU para dibujar la escena,
-pero la reconstrucción geométrica (marching cubes, suavizado y escritura STL)
-es un paso de CPU. TotalSegmentator/nnUNet no acepta DirectML en
-su interfaz actual, por lo que el pipeline lo ejecuta en CPU y lo declara en
-los logs; nunca se etiqueta como GPU para ocultar ese fallback. Los modelos
-ONNX que se incorporen al proyecto pueden seleccionar DirectML automáticamente
-y conservar `CPUExecutionProvider` como fallback. Para forzar el backend:
+mediante `torch.cuda` ni `nvidia-smi`. La detección crea una sesión ONNX de
+prueba; no se limita a leer la lista de proveedores instalados. La
+aceleración de render VTK/OpenGL es independiente de la inferencia. El visor
+3D usa la GPU para dibujar la escena, pero la reconstrucción geométrica
+(marching cubes, suavizado y escritura STL) es un paso de CPU.
+
+TotalSegmentator/nnUNet no acepta DirectML en su interfaz ni en su runtime
+actual: solo admite `cpu`, `cuda/gpu` y `mps`. Por eso la segmentación de
+cerebro/cráneo se ejecuta en CPU y lo declara en los logs; nunca se etiqueta
+como GPU para ocultar ese fallback. No es seguro sustituir `cpu` por `gpu` en
+una Radeon: nnUNet intentaría inicializar CUDA y fallaría o produciría un
+resultado no verificable.
+
+Los modelos ONNX exportados y validados sí seleccionan DirectML
+automáticamente y conservan `CPUExecutionProvider` como fallback. Para forzar
+el backend:
 
 ```text
 NEUROHUB_ONNX_PROVIDER=directml
 ```
 
-Si DirectML no está instalado, esta variable produce un error explícito en vez
-de degradar silenciosamente a CPU. Las máscaras clínicas solo deben generarse
-con un modelo validado para la modalidad y el modo solicitado.
+Si DirectML no está instalado o el driver no puede crear una sesión, esta
+variable produce un error explícito en vez de degradar silenciosamente a CPU.
+Las máscaras clínicas solo deben generarse con un modelo validado para la
+modalidad y el modo solicitado. Para seleccionar DirectML en un modelo
+TotalSegmentator se necesitaría una exportación ONNX completa de nnUNet,
+incluyendo sus ventanas deslizantes y pre/postprocesado; esa conversión no se
+activa automáticamente porque podría cambiar la salida clínica.
 
 Por defecto no se inicializa CUDA ni se consulta el driver NVIDIA. La variable
 `NEUROHUB_ENABLE_CUDA=1` queda únicamente como compatibilidad explícita para
@@ -258,11 +352,17 @@ crecimiento regional **acotado a 6 mm**: sin esa cota el watershed inunda toda
 la convexidad, porque el tejido cerebral también supera el umbral. Resultado:
 5.5 cm³, con la masa completa y no solo su anillo brillante.
 
-**Vasculatura y Detección de Aneurismas**: La segmentación automática de vasos
-(venas y arterias) se ha retirado del pipeline por falta de secuencias de contraste
-dedicadas (MRA/CTA) en resonancias magnéticas convencionales. La detección de aneurismas
-permanece en el código como modo inerte y solo se activará si el usuario proporciona
-previamente una máscara vascular externa (`vasos.nii.gz`).
+**Flujo clínico CTA asistido**: Desde `launcher.py ui`, el botón **Flujo clínico
+CTA** valida modalidad, orientación, origen, espaciado y continuidad de la serie,
+selecciona explícitamente la serie con más cortes cuando una carpeta contiene
+varias, y genera `vasos_cta.nrrd` conservando la geometría DICOM. La máscara es
+un candidato inicial por intensidad de contraste, no un diagnóstico, y queda
+registrada en `clinical_report.json` con un registro identidad validado para la
+serie única. El botón **Aprobar CTA y exportar SEG** exige una confirmación humana
+explícita antes de crear `vasos_cta.dcmseg` con referencias a la serie fuente.
+El proceso deja advertencias cuando la carpeta contiene varias series o las
+intensidades no son compatibles con una CTA. La revisión clínica por un
+profesional sigue siendo obligatoria.
 
 ## 🎮 Controles
 
@@ -323,17 +423,38 @@ Descarga directa desde HuggingFace:
 La plataforma exporta:
 
 ### FBX para Unity
-Archivos individuales con materiales PBR (color por estructura):
-- `salidas/fbx/cerebro.fbx` (3.8 MB)
-- `salidas/fbx/craneo.fbx` (9.6 MB)
-- `salidas/fbx/tumor.fbx` (2.2 MB)
-- `salidas/fbx/arterias.fbx` (275 KB)
-- `salidas/fbx/venas.fbx` (474 KB)
-- `salidas/fbx/vasos.fbx` (4.0 MB)
-- `salidas/fbx/neurohub_completo.fbx` (20.5 MB) — modelo combinado
+Archivos individuales con materiales PBR (color por estructura). En la
+interfaz Qt se guardan dentro del estudio activo:
+- `<estudio>/mallas/*.stl`
+- `<estudio>/fbx/*.fbx`
+- `<estudio>/segmentaciones_ai/*.nii.gz`
+- `<estudio>/segmentaciones_ai/vistas_2d/*.png`
+
+La carpeta global `salidas/` se conserva únicamente para compatibilidad con
+el flujo legacy y no se reutiliza al cambiar entre estudios en Qt.
+
+#### Reconstrucción de máxima resolución
+
+Cuando faltan máscaras anatómicas base, NEUROHUB puede delegar la conversión
+de los labelmaps del estudio activo a superficies cerradas en 3D Slicer
+(`src/slicer_reconstruct.py`). Las rutas se entregan por entorno al proceso de
+Slicer, por lo que un estudio nunca puede leer las máscaras de otro.
+
+La exportación FBX usa primero el adaptador Python integrado y, si `bpy` no
+está disponible en el entorno de la aplicación, ejecuta Blender en modo
+headless mediante `herramientas/blender_export.py`. El runner importa las STL
+sin decimarlas, aplica materiales por estructura y escribe únicamente en
+`<estudio>/fbx`. Comprueba la instalación con:
+
+```powershell
+python launcher.py doctor
+```
+
+En Windows también se buscan instalaciones de Blender bajo `Program Files`
+aunque `blender.exe` no esté en `PATH`.
 
 ### STL para neuronavegación/impresión 3D
-- `salidas/mallas/*.stl` — mallas de máxima resolución (marching cubes)
+- `<estudio>/mallas/*.stl` — mallas de máxima resolución (marching cubes)
 - Compatible con Medtronic StealthStation, BrainLab, 3D Slicer
 
 ### Flujo Unity → gafas AR

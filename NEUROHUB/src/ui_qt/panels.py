@@ -296,6 +296,29 @@ class StudyPanel(QWidget):
         self._btn_run.clicked.connect(lambda: self.ejecutar.emit("pipeline"))
         p.addWidget(self._btn_run)
 
+        self._btn_freesurfer = QPushButton("FreeSurfer (aseg)")
+        self._btn_freesurfer.setToolTip(
+            "Ejecuta recon-all sobre el estudio activo y exporta la "
+            "segmentación anatómica aseg como NIfTI. Requiere T1/T1w y "
+            "license.txt.")
+        self._btn_freesurfer.clicked.connect(
+            lambda: self.ejecutar.emit("freesurfer"))
+        p.addWidget(self._btn_freesurfer)
+
+        self._btn_cta = QPushButton("Flujo clínico CTA")
+        self._btn_cta.setToolTip(
+            "Validar geometría, generar candidato vascular CTA y exportar NRRD. "
+            "El DICOM SEG requiere revisión humana.")
+        self._btn_cta.clicked.connect(lambda: self.ejecutar.emit("cta"))
+        p.addWidget(self._btn_cta)
+
+        self._btn_cta_aprobar = QPushButton("Aprobar CTA y exportar SEG")
+        self._btn_cta_aprobar.setToolTip(
+            "Registra la revisión humana local y genera DICOM SEG.")
+        self._btn_cta_aprobar.clicked.connect(
+            lambda: self.ejecutar.emit("cta_aprobar"))
+        p.addWidget(self._btn_cta_aprobar)
+
         self._btn_fbx = QPushButton("Exportar FBX")
         self._btn_fbx.setToolTip("Convertir las mallas STL a FBX")
         self._btn_fbx.clicked.connect(lambda: self.ejecutar.emit("exportar"))
@@ -394,5 +417,6 @@ class StudyPanel(QWidget):
         proc = getattr(self, "_procesando", False)
         mallas = getattr(self, "_hay_mallas", False)
         self._btn_run.setEnabled(not proc and bool(self.ruta()))
+        self._btn_freesurfer.setEnabled(not proc and bool(self.ruta()))
         self._btn_fbx.setEnabled(not proc and mallas)
         self._btn_cancel.setEnabled(proc)

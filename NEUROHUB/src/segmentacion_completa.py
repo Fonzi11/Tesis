@@ -44,6 +44,9 @@ SALIDAS_DIR = os.path.join(os.path.dirname(BASE_DIR), "salidas")
 SEG_AI_DIR = os.path.join(SALIDAS_DIR, "segmentaciones_ai")
 MALLAS_DIR = os.path.join(SALIDAS_DIR, "mallas")
 FBX_DIR = os.path.join(SALIDAS_DIR, "fbx")
+GENERAR_VASCULATURA_SINTETICA = os.environ.get(
+    "NEUROHUB_VASCULATURA_SINTETICA", "1"
+).lower() not in {"0", "false", "no"}
 
 os.makedirs(MALLAS_DIR, exist_ok=True)
 os.makedirs(FBX_DIR, exist_ok=True)
@@ -73,18 +76,152 @@ ESTRUCTURAS = {
         "taubin_iter": 40,
         "min_component_voxels": 20,
     },
+    # Estas capas solo se construyen si existe una máscara vascular aportada
+    # por CTA/MRA/MRV/CTV o por una segmentación experta. No se inventan vasos
+    # desde una RM anatómica que no los resuelva.
+    "vasos": {
+        "mascara": ["vasos.nii.gz", "vessels.nii.gz", "vascular.nii.gz"],
+        "color": (0.92, 0.12, 0.10),
+        "sigma_smooth": 0.35,
+        "taubin_iter": 12,
+        "min_component_voxels": 3,
+        "vascular": True,
+        "max_gap_mm": 1.8,
+    },
+    "vasculatura_sintetica": {
+        "color": (0.95, 0.24, 0.12),
+        "synthetic": True,
+    },
+    "arterias": {
+        "mascara": ["arterias.nii.gz", "arteries.nii.gz"],
+        "color": (0.95, 0.16, 0.10),
+        "sigma_smooth": 0.30,
+        "taubin_iter": 10,
+        "min_component_voxels": 2,
+        "vascular": True,
+    },
+    "venas": {
+        "mascara": ["venas.nii.gz", "veins.nii.gz"],
+        "color": (0.14, 0.35, 0.92),
+        "sigma_smooth": 0.30,
+        "taubin_iter": 10,
+        "min_component_voxels": 2,
+        "vascular": True,
+    },
+}
+
+# Grupos ASEG exportables como mallas independientes. Los IDs siguen la tabla
+# estándar de FreeSurfer; agrupar izquierda/derecha evita solapes visuales y
+# permite aplicar una paleta tipo FreeSurfer en Unity.
+FREESURFER_ESTRUCTURAS = {
+    "fs_cortex": {
+        "labels": (3, 42), "color": (0.32, 0.82, 0.45), "opacity": 0.45,
+    },
+    "fs_white_matter": {
+        "labels": (2, 41), "color": (0.35, 0.62, 0.95), "opacity": 0.32,
+    },
+    "fs_cerebellum": {
+        "labels": (8, 47), "color": (0.95, 0.72, 0.12), "opacity": 0.88,
+    },
+    "fs_brainstem": {
+        "labels": (16,), "color": (0.95, 0.30, 0.18), "opacity": 0.92,
+    },
+    "fs_thalamus": {
+        "labels": (10, 49), "color": (0.77, 0.26, 0.88), "opacity": 0.92,
+    },
+    "fs_basal_ganglia": {
+        "labels": (11, 12, 13, 50, 51, 52),
+        "color": (0.12, 0.75, 0.88), "opacity": 0.92,
+    },
+    "fs_hippocampus": {
+        "labels": (17, 18, 53, 54), "color": (0.95, 0.28, 0.62),
+        "opacity": 0.92,
+    },
+    "fs_ventricles": {
+        "labels": (4, 5, 14, 15, 24, 43, 44),
+        "color": (0.96, 0.96, 0.96), "opacity": 0.55,
+    },
 }
 
 
-def cargar_mascara(nombre_mascara):
+def cargar_mascara(nombre_mascara, segmentaciones_dir=None):
     """Carga una máscara NIfTI y devuelve (array, imagen_sitk)."""
-    ruta = os.path.join(SEG_AI_DIR, nombre_mascara)
-    if not os.path.exists(ruta):
-        print(f"[SEG3D] [!] Máscara no encontrada: {ruta}")
-        return None, None
-    img = sitk.ReadImage(ruta)
-    arr = (sitk.GetArrayFromImage(img) > 0).astype(np.uint8)
-    return arr, img
+    segmentaciones_dir = segmentaciones_dir or SEG_AI_DIR
+    nombres = [nombre_mascara] if isinstance(nombre_mascara, str) else nombre_mascara
+    for nombre in nombres:
+        ruta = os.path.join(segmentaciones_dir, nombre)
+        if not os.path.exists(ruta):
+            continue
+        img = sitk.ReadImage(ruta)
+        arr = (sitk.GetArrayFromImage(img) > 0).astype(np.uint8)
+        if arr.any():
+            return arr, img
+    return None, None
+
+
+def _reparar_mascara_vascular(mask, spacing, max_gap_mm=1.0):
+    """Cierra solo brechas submilimétricas/pequeñas sin unir árboles cercanos."""
+    mask = np.asarray(mask, dtype=bool)
+    if not mask.any():
+        return mask.astype(np.uint8)
+    sx, sy, sz = (float(v) for v in spacing[:3])
+    radios = np.maximum(
+        1, np.ceil(np.array([max_gap_mm / sz, max_gap_mm / sy,
+                             max_gap_mm / sx])).astype(int),
+    )
+    zz, yy, xx = np.ogrid[
+        -radios[0]:radios[0] + 1,
+        -radios[1]:radios[1] + 1,
+        -radios[2]:radios[2] + 1,
+    ]
+    estructura = (
+        (zz / radios[0]) ** 2 + (yy / radios[1]) ** 2
+        + (xx / radios[2]) ** 2
+    ) <= 1.0
+    reparada = binary_closing(mask, structure=estructura)
+    return reparada.astype(np.uint8)
+
+
+def _completar_envoltura_craneal(craneo, spacing, max_gap_mm=3.0):
+    """Repara discontinuidades de la calota sin crear un cráneo desde cero.
+
+    La máscara observada se cierra en milímetros físicos, se rellenan solo
+    cavidades completamente rodeadas y se conservan sus componentes. Esto
+    elimina cortes y agujeros de segmentación, pero no extrapola una forma
+    craneal fuera de la evidencia de la imagen.
+    """
+    mask = np.asarray(craneo, dtype=bool)
+    if not mask.any():
+        return mask.astype(np.uint8)
+    sx, sy, sz = (float(v) for v in spacing[:3])
+    radios = np.maximum(
+        1,
+        np.ceil(np.array([max_gap_mm / sz, max_gap_mm / sy,
+                          max_gap_mm / sx])).astype(int),
+    )
+    zz, yy, xx = np.ogrid[
+        -radios[0]:radios[0] + 1,
+        -radios[1]:radios[1] + 1,
+        -radios[2]:radios[2] + 1,
+    ]
+    estructura = (
+        (zz / radios[0]) ** 2 + (yy / radios[1]) ** 2
+        + (xx / radios[2]) ** 2
+    ) <= 1.0
+    reparada = binary_closing(mask, structure=estructura)
+    reparada = binary_fill_holes(reparada)
+    etiquetas, cantidad = ndimage.label(
+        reparada, structure=np.ones((3, 3, 3), dtype=np.uint8)
+    )
+    if cantidad > 1:
+        tamaños = np.bincount(etiquetas.ravel())
+        componente_principal = 1 + int(np.argmax(tamaños[1:]))
+        residuos = int(np.count_nonzero(reparada & (etiquetas != componente_principal)))
+        reparada = etiquetas == componente_principal
+        if residuos:
+            print(f"[SEG3D] Cráneo: se descartan {residuos:,} voxels "
+                  "residuales desconectados.")
+    return reparada.astype(np.uint8)
 
 
 # Fracción máxima de la extensión del cráneo que puede ocupar un tumor
@@ -95,7 +232,7 @@ def cargar_mascara(nombre_mascara):
 _MAX_FRACCION_EXTENSION_TUMOR = 0.40
 
 
-def _cargar_tumor_plausible(preferir=None):
+def _cargar_tumor_plausible(preferir=None, segmentaciones_dir=None):
     """
     Carga la mejor máscara de tumor disponible evitando blobs difusos.
 
@@ -115,6 +252,7 @@ def _cargar_tumor_plausible(preferir=None):
     (es un artefacto de sobre-segmentación, no un tumor).
     """
     import SimpleITK as sitk_
+    segmentaciones_dir = segmentaciones_dir or SEG_AI_DIR
 
     candidatas = []
     if preferir:
@@ -129,7 +267,7 @@ def _cargar_tumor_plausible(preferir=None):
     # Extensión del cráneo (mm) para la cota de plausibilidad.
     span_craneo_mm = 218.0  # diametro mayor aproximado de skull.nii.gz
     try:
-        skull = sitk.ReadImage(os.path.join(SEG_AI_DIR, "skull.nii.gz"))
+        skull = sitk.ReadImage(os.path.join(segmentaciones_dir, "skull.nii.gz"))
         sarr = (sitk.GetArrayFromImage(skull) > 0)
         if sarr.any():
             ssp = skull.GetSpacing()
@@ -146,7 +284,7 @@ def _cargar_tumor_plausible(preferir=None):
         # os.path.join ignoraria SEG_AI_DIR en ese caso; aun asi se resuelve
         # de forma explicita para no depender de ese comportamiento.
         ruta = nombre if os.path.isabs(nombre) \
-            else os.path.join(SEG_AI_DIR, nombre)
+            else os.path.join(segmentaciones_dir, nombre)
         if not os.path.exists(ruta):
             continue
         try:
@@ -170,7 +308,8 @@ def _cargar_tumor_plausible(preferir=None):
     return None, None, None
 
 
-def _cargar_estructura(nombre, cfg, preferir_tumor=None):
+def _cargar_estructura(nombre, cfg, preferir_tumor=None,
+                       segmentaciones_dir=None):
     """Carga la máscara de una estructura con manejo especial para el tumor.
 
     `preferir_tumor` es la ruta de la máscara de delineado MANUAL. Cuando se
@@ -178,6 +317,11 @@ def _cargar_estructura(nombre, cfg, preferir_tumor=None):
     selección automática: es lo que el usuario ha corregido a mano en el
     visor 2D y es lo que debe verse en 3D.
     """
+    if cfg.get("synthetic"):
+        print(f"[SEG3D] {nombre}: se omite de la ruta de máscaras "
+              "porque es una estructura ilustrativa.")
+        return None, None
+
     if nombre == "tumor":
         if not preferir_tumor or not os.path.exists(preferir_tumor):
             print("[SEG3D] tumor: se omite hasta que exista una "
@@ -210,7 +354,7 @@ def _cargar_estructura(nombre, cfg, preferir_tumor=None):
                 return None, None
         print(f"[SEG3D] tumor: máscara MANUAL -> {preferir_tumor}")
     else:
-        arr, img = cargar_mascara(cfg["mascara"])
+        arr, img = cargar_mascara(cfg["mascara"], segmentaciones_dir)
 
     if arr is None:
         return None, None
@@ -390,7 +534,94 @@ def mascara_a_malla(mask, spacing, smooth=1.0, taubin_iter=45):
     return verts, faces
 
 
-def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
+def generar_vasculatura_sintetica(mask_cerebro, spacing, salida_path):
+        """Genera una red vascular ilustrativa adaptada al volumen cerebral.
+
+        Esta red no representa vasos medidos del paciente: es un patrón
+        determinista tipo atlas, útil para demos y para comprobar escala,
+        iluminación y relación espacial con el tumor.
+        """
+        if trimesh is None or mask_cerebro is None or not np.any(mask_cerebro):
+            return None
+
+        indices = np.nonzero(np.asarray(mask_cerebro) > 0)
+        sx, sy, sz = (float(v) for v in spacing[:3])
+        minimo = np.array([
+            indices[0].min() * sz, indices[1].min() * sy, indices[2].min() * sx
+        ], dtype=float)
+        maximo = np.array([
+            indices[0].max() * sz, indices[1].max() * sy, indices[2].max() * sx
+        ], dtype=float)
+        centro = (minimo + maximo) * 0.5
+        semiejes = (maximo - minimo) * 0.5
+        if np.min(semiejes) <= 0:
+            return None
+
+        # Coordenadas en el mismo orden físico que las mallas del pipeline: (z, y, x).
+        def dentro(offset):
+            return centro + np.asarray(offset, dtype=float) * semiejes * 0.78
+
+        nodos = []
+        segmentos = []
+        rng = np.random.default_rng(2026)
+
+        def crecer(origen, direccion, longitud, radio, nivel, indice):
+            direccion = np.asarray(direccion, dtype=float)
+            direccion /= max(np.linalg.norm(direccion), 1e-6)
+            destino = dentro((origen - centro) / semiejes +
+                             direccion * longitud / semiejes)
+            nodos.append((origen, radio))
+            nodos.append((destino, max(0.55, radio * 0.72)))
+            segmentos.append((origen, destino, radio))
+            if nivel == 0:
+                return
+            base = destino - centro
+            for rama in (-1.0, 1.0):
+                lateral = np.array([
+                    rng.uniform(-0.18, 0.18),
+                    rama * rng.uniform(0.45, 0.78),
+                    rng.uniform(-0.30, 0.30),
+                ])
+                nueva = direccion * 0.72 + lateral
+                crecer(
+                    destino, nueva,
+                    longitud * (0.58 if nivel > 1 else 0.52),
+                    radio * 0.68, nivel - 1, indice * 2 + int(rama > 0)
+                )
+
+        raiz = dentro((0.18, 0.0, 0.0))
+        crecer(raiz, (-0.85, 0.05, 0.0), semiejes[0] * 0.42, 2.8, 3, 0)
+        crecer(raiz, (0.05, 0.0, -0.85), semiejes[2] * 0.34, 2.2, 2, 1)
+        crecer(raiz, (0.05, 0.0, 0.85), semiejes[2] * 0.34, 2.2, 2, 2)
+
+        piezas = []
+        for inicio, fin, radio in segmentos:
+            vector = fin - inicio
+            largo = float(np.linalg.norm(vector))
+            if largo < 1.0:
+                continue
+            tubo = trimesh.creation.cylinder(
+                radius=float(radio), height=largo, sections=8
+            )
+            tubo.apply_transform(trimesh.geometry.align_vectors(
+                [0.0, 0.0, 1.0], vector / largo
+            ))
+            tubo.apply_translation((inicio + fin) * 0.5)
+            piezas.append(tubo)
+        for punto, radio in nodos:
+            piezas.append(trimesh.creation.icosphere(
+                subdivisions=1, radius=float(radio * 1.08)
+            ).apply_translation(punto))
+
+        if not piezas:
+            return None
+        malla = trimesh.util.concatenate(piezas)
+        os.makedirs(os.path.dirname(salida_path), exist_ok=True)
+        malla.export(salida_path)
+        return malla
+
+def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None,
+                      segmentaciones_dir=None):
     """
     Genera todas las mallas 3D a máxima resolución y las guarda como STL.
     Utiliza 3D Slicer para la reconstrucción exacta de arterias, venas y estructuras.
@@ -406,9 +637,11 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
         dict: {estructura: {stl, verts, faces, voxels, volumen_mm3}}
     """
     salida_dir = salida_dir or MALLAS_DIR
+    segmentaciones_dir = segmentaciones_dir or SEG_AI_DIR
     os.makedirs(salida_dir, exist_ok=True)
 
     resultados = {}
+    notas = []
 
     # No conservar un STL tumoral de una corrida anterior: si esta ejecución
     # no recibe una delineación manual, ese archivo sería una salida falsa.
@@ -424,6 +657,7 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
 
     import subprocess
     import shutil
+    import time
 
     slicer_exe = r"D:\APPS\3D Slicer 5.12.3\Slicer.exe"
     if not os.path.exists(slicer_exe):
@@ -437,17 +671,49 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
     # anatómica aplicada abajo; para este caso se usa la ruta nativa.
     usar_slicer = not (mascara_tumor and os.path.exists(mascara_tumor)) \
         and not (
-            os.path.exists(os.path.join(SEG_AI_DIR, "brain.nii.gz"))
-            and os.path.exists(os.path.join(SEG_AI_DIR, "skull.nii.gz"))
+            os.path.exists(os.path.join(segmentaciones_dir, "brain.nii.gz"))
+            and os.path.exists(os.path.join(segmentaciones_dir, "skull.nii.gz"))
         )
 
     if usar_slicer and slicer_exe and os.path.exists(slicer_exe) \
             and os.path.exists(script_slicer):
         print(f"[SEG3D] Reconstruyendo arterias, venas y mallas con 3D Slicer ({slicer_exe})...")
         try:
-            cmd = [slicer_exe, "--no-main-window", "--no-splash", "--python-script", script_slicer]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-            if proc.returncode == 0:
+            entorno_slicer = os.environ.copy()
+            entorno_slicer["NEUROHUB_SEGMENTATIONS_DIR"] = os.path.abspath(
+                segmentaciones_dir)
+            entorno_slicer["NEUROHUB_MESHES_DIR"] = os.path.abspath(salida_dir)
+            cmd = [
+                slicer_exe, "--no-main-window", "--no-splash",
+                "--python-script", script_slicer,
+            ]
+            # En Windows Slicer.exe es un launcher que devuelve el control
+            # antes de que SlicerApp-real termine. Por eso la evidencia de
+            # exito son los STL del estudio, no el codigo del launcher.
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, env=entorno_slicer,
+            )
+            limite = time.monotonic() + 180
+            while time.monotonic() < limite:
+                if any(
+                    os.path.isfile(os.path.join(salida_dir, f"{nombre}.stl"))
+                    for nombre in ("cerebro", "craneo", "vasos", "arterias", "venas")
+                ):
+                    break
+                time.sleep(0.5)
+            try:
+                stdout, stderr = proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", ""
+            if stdout:
+                print(stdout.rstrip())
+            if stderr:
+                print(stderr.rstrip(), file=sys.stderr)
+            if any(
+                os.path.isfile(os.path.join(salida_dir, f"{nombre}.stl"))
+                for nombre in ("cerebro", "craneo", "vasos", "arterias", "venas")
+            ):
                 print("[SEG3D] [OK] Reconstrucción anatómica con 3D Slicer completada")
                 import trimesh
                 
@@ -455,6 +721,9 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
                     "cerebro": (0.83, 0.67, 0.62),
                     "craneo": (0.91, 0.88, 0.83),
                     "tumor": (0.75, 0.15, 0.43),
+                    "vasos": (0.92, 0.12, 0.10),
+                    "arterias": (0.95, 0.16, 0.10),
+                    "venas": (0.14, 0.35, 0.92),
                 }
 
                 for est_name, col in colores_est.items():
@@ -499,7 +768,9 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
 
     mascaras = {}
     for nombre, cfg in ESTRUCTURAS.items():
-        arr, img = _cargar_estructura(nombre, cfg, preferir_tumor=mascara_tumor)
+        arr, img = _cargar_estructura(
+            nombre, cfg, preferir_tumor=mascara_tumor,
+            segmentaciones_dir=segmentaciones_dir)
         if arr is not None:
             mascaras[nombre] = (arr, img)
 
@@ -512,8 +783,8 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
         cerebro_arr, _cerebro_img = mascaras["cerebro"]
         craneo_arr = _restringir_craneo_a_cerebro(
             craneo_arr, cerebro_arr, craneo_img.GetSpacing())
-        craneo_arr = _reparar_huecos_craneo(
-            craneo_arr, craneo_img.GetSpacing())
+        craneo_arr = _completar_envoltura_craneal(
+            craneo_arr, craneo_img.GetSpacing(), max_gap_mm=8.0)
         mascaras["craneo"] = (craneo_arr, craneo_img)
         ruta_limpia = os.path.join(salida_dir, "skull_cleaned.nii.gz")
         imagen_limpia = sitk.GetImageFromArray(craneo_arr.astype(np.uint8))
@@ -526,6 +797,16 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
             continue
 
         mask_arr, mask_img = mascaras[nombre]
+        if cfg.get("vascular"):
+            original_voxels = int(mask_arr.sum())
+            mask_arr = _reparar_mascara_vascular(
+                mask_arr, mask_img.GetSpacing(),
+                max_gap_mm=cfg.get("max_gap_mm", 1.0))
+            added = int(mask_arr.sum()) - original_voxels
+            if added:
+                print(f"[SEG3D] {nombre}: {added:,} voxels de brechas vasculares "
+                      f"pequenas interpolados (máx. {cfg.get('max_gap_mm', 1.0):g} mm)")
+            mascaras[nombre] = (mask_arr, mask_img)
         spacing = mask_img.GetSpacing()
         if mask_arr is None or mask_arr.sum() == 0:
             print(f"[SEG3D] [!] {nombre}: máscara vacía")
@@ -577,6 +858,84 @@ def generar_mallas_3d(mri_path=None, salida_dir=None, mascara_tumor=None):
     return resultados
 
 
+def generar_mallas_freesurfer_aseg(aseg_path=None, salida_dir=None,
+                                   mascara_tumor=None, informes_dir=None):
+    """Genera mallas coloreables por estructura desde el atlas ASEG."""
+    aseg_path = aseg_path or os.path.join(SEG_AI_DIR, "freesurfer_aseg.nii.gz")
+    salida_dir = salida_dir or MALLAS_DIR
+    if not os.path.isfile(aseg_path):
+        raise FileNotFoundError(aseg_path)
+    os.makedirs(salida_dir, exist_ok=True)
+
+    imagen = sitk.ReadImage(aseg_path)
+    array = sitk.GetArrayFromImage(imagen)
+    spacing = tuple(float(v) for v in imagen.GetSpacing()[::-1])
+    resultados = {}
+    notas = []
+    for nombre, cfg in FREESURFER_ESTRUCTURAS.items():
+        mascara = np.isin(array, cfg["labels"]).astype(np.uint8)
+        if int(mascara.sum()) == 0:
+            continue
+        verts, faces, _normals, _values = measure.marching_cubes(
+            mascara, level=0.5, spacing=spacing)
+        if len(verts) == 0 or len(faces) == 0:
+            continue
+        ruta = os.path.join(salida_dir, f"{nombre}.stl")
+        trimesh.Trimesh(vertices=verts, faces=faces).export(ruta)
+        resultados[nombre] = {
+            "stl": ruta, "labels": list(cfg["labels"]),
+            "color": cfg["color"], "opacity": cfg["opacity"],
+            "voxels": int(mascara.sum()),
+        }
+
+    tumor_path = mascara_tumor
+    if not tumor_path:
+        for nombre in ("tumor_manual.nii.gz", "tumor_brats.nii.gz",
+                       "tumor.nii.gz"):
+            candidato = os.path.join(SEG_AI_DIR, nombre)
+            if os.path.isfile(candidato):
+                tumor_path = candidato
+                break
+    if tumor_path and os.path.isfile(tumor_path):
+        tumor_img = sitk.ReadImage(tumor_path)
+        if tumor_img.GetSize() != imagen.GetSize() or \
+                tumor_img.GetSpacing() != imagen.GetSpacing():
+            tumor_img = sitk.Resample(
+                tumor_img, imagen, sitk.Transform(),
+                sitk.sitkNearestNeighbor, 0, sitk.sitkUInt8)
+        tumor = sitk.GetArrayFromImage(tumor_img) > 0
+        if tumor.shape == array.shape and int(tumor.sum()):
+            verts, faces, _normals, _values = measure.marching_cubes(
+                tumor.astype(np.uint8), level=0.5, spacing=spacing)
+            ruta = os.path.join(salida_dir, "tumor.stl")
+            trimesh.Trimesh(vertices=verts, faces=faces).export(ruta)
+            resultados["tumor"] = {
+                "stl": ruta, "color": (0.95, 0.05, 0.22),
+                "opacity": 1.0, "voxels": int(tumor.sum()),
+            }
+        else:
+            notas.append(
+                "La máscara tumoral no se exportó: tras el registro por "
+                "coordenadas físicas no contiene voxeles dentro del espacio "
+                "del atlas ASEG. Se requiere una máscara del mismo estudio.")
+    if informes_dir:
+        from informes_modelos import generar_informes
+        mascaras = {}
+        if mascara_tumor and os.path.isfile(mascara_tumor):
+            mascaras["tumor"] = mascara_tumor
+        generar_informes(
+            salida_dir, informes_dir, mascaras=mascaras,
+            volumen=aseg_path,
+            operaciones=[
+                "Lectura del atlas FreeSurfer ASEG en NIfTI.",
+                "Agrupación de etiquetas ASEG por estructura anatómica.",
+                "Reconstrucción de superficie con marching cubes.",
+                "Exportación STL independiente por estructura.",
+            ],
+            notas=notas)
+    return resultados
+
+
 # =============================================================================
 # EXPORTACIÓN FBX PARA UNITY (usando Blender/bpy)
 # =============================================================================
@@ -602,6 +961,7 @@ def exportar_fbx_bpy(stl_dir=None, fbx_dir=None):
         "cerebro": (0.65, 0.67, 0.72),
         "craneo": (0.90, 0.88, 0.82),
         "tumor": (0.78, 0.15, 0.86),
+        **{k: v["color"] for k, v in FREESURFER_ESTRUCTURAS.items()},
     }
 
     stl_files = sorted([f for f in os.listdir(stl_dir)
@@ -674,6 +1034,7 @@ def exportar_un_fbx_por_malla(stl_dir=None, fbx_dir=None):
         "cerebro": (0.65, 0.67, 0.72),
         "craneo": (0.90, 0.88, 0.82),
         "tumor": (0.78, 0.15, 0.86),
+        **{k: v["color"] for k, v in FREESURFER_ESTRUCTURAS.items()},
     }
 
     stl_files = sorted([f for f in os.listdir(stl_dir)

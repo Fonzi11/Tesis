@@ -39,18 +39,34 @@ class Viewer3D(QWidget):
     # Orden de dibujado: primero las superficies envolventes, despues las
     # estructuras internas. Es lo que hace posible la vista clinica de
     # craneo + cerebro + tumor superpuestos.
-    ORDEN_ESCENA = ["craneo", "skull", "cerebro", "brain",
-                    "tumor", "aneurisma"]
+    ORDEN_ESCENA = [
+        "craneo", "skull", "cerebro", "brain",
+        "fs_white_matter", "fs_cortex", "fs_cerebellum", "fs_brainstem",
+        "fs_thalamus", "fs_basal_ganglia", "fs_hippocampus", "fs_ventricles",
+        "vasos", "arterias", "venas", "vessels",
+        "tumor", "aneurisma",
+    ]
 
     # Opacidad de las envolventes: se vuelven semitransparentes solo cuando
     # hay algo visible dentro, para no tapar el tumor o los vasos.
-    OPACIDAD_ESTRUCTURA = {"craneo": 0.28, "cerebro": 0.45}
+    OPACIDAD_ESTRUCTURA = {
+        "craneo": 0.16, "cerebro": 0.32, "fs_cortex": 0.45,
+        "fs_white_matter": 0.32, "fs_ventricles": 0.55,
+    }
 
     # Ver comentario de QUALITY_FACES en main.py: el techo de caras depende
     # del MODELO y no del tamano de la malla.
     QUALITY_FACES = {
-        "high":   {"craneo": 900000, "cerebro": 700000, "default": 400000},
-        "medium": {"craneo": 150000, "cerebro": 120000, "default": 80000},
+        "high":   {
+            "craneo": 900000, "cerebro": 700000,
+            "vasos": 700000, "arterias": 700000, "venas": 700000,
+            "default": 400000,
+        },
+        "medium": {
+            "craneo": 150000, "cerebro": 120000,
+            "vasos": 180000, "arterias": 180000, "venas": 180000,
+            "default": 80000,
+        },
     }
     MAX_FACES_ABSOLUTO = 1200000
 
@@ -81,6 +97,9 @@ class Viewer3D(QWidget):
 
         self._vtk_host = QWidget()
         self._vtk_host.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._vtk_layout = QVBoxLayout(self._vtk_host)
+        self._vtk_layout.setContentsMargins(0, 0, 0, 0)
+        self._vtk_layout.setSpacing(0)
         self._layout.addWidget(self._vtk_host, 1)
 
         # Mensaje central cuando no hay nada que mostrar. Se hace visible/oculto
@@ -131,6 +150,9 @@ class Viewer3D(QWidget):
         self._ren.SetAmbient(0.12, 0.14, 0.17)
 
         self._interactor = QVTKRenderWindowInteractor(self._vtk_host)
+        self._interactor.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._vtk_layout.addWidget(self._interactor, 1)
         self._ren_win = self._interactor.GetRenderWindow()
         self._ren_win.AddRenderer(self._ren)
         self._interactor.Initialize()
@@ -307,13 +329,14 @@ class Viewer3D(QWidget):
         if self._ren_win is not None:
             self._ren_win.Render()
 
-    def guardar_imagen(self, ruta):
+    def guardar_imagen(self, ruta, escala=1):
         """Escribe la vista actual en un PNG. Devuelve True si se genero.
 
         Se usa `vtkWindowToImageFilter` en lugar de `WriteToPNG`, que VTK 9.7
         elimino de `vtkRenderWindow`. El filtro tambien fija el buffer como RGBA y
         descarta el canal alfa al escribir, de modo que el fondo oscuro del
-        renderer sale opaco y no transparente.
+        renderer sale opaco y no transparente. ``escala`` permite capturar por
+        encima de la resolucion del widget sin degradar la geometria.
         """
         if self._ren_win is None or not ruta:
             return False
@@ -324,7 +347,7 @@ class Viewer3D(QWidget):
             self._ren_win.Render()
             cap = vtk.vtkWindowToImageFilter()
             cap.SetInput(self._ren_win)
-            cap.SetScale(1)
+            cap.SetScale(max(1, min(int(escala), 4)))
             cap.SetInputBufferTypeToRGBA()
             cap.ReadFrontBufferOff()
             cap.Update()

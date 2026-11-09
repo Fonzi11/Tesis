@@ -37,6 +37,19 @@ archivo/
 *.glb
 *.gltf
 
+# ===== Artefactos generados por Unity =====
+NEUROHUB/unity/**/Library/
+NEUROHUB/unity/**/Temp/
+NEUROHUB/unity/**/Obj/
+NEUROHUB/unity/**/Logs/
+NEUROHUB/unity/**/UserSettings/
+NEUROHUB/unity/**/.vs/
+NEUROHUB/unity/**/*.csproj
+NEUROHUB/unity/**/*.sln
+
+# Licencias locales de motores externos; configurar fuera del repositorio.
+license.txt
+
 # ===== Archivos temporales / accidentales =====
 nul
 _print_tmp.py

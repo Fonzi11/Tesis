@@ -20,27 +20,67 @@ class InferenceBackend:
     reason: str
 
 
+def _directml_runtime_check() -> tuple[bool, str]:
+    """Comprueba que DirectML puede crear una sesión, no solo anunciarse."""
+    try:
+        import onnxruntime as ort
+    except Exception as exc:
+        return False, f"runtime ONNX no disponible: {exc}"
+
+    if "DmlExecutionProvider" not in ort.get_available_providers():
+        return False, "ONNX Runtime no expone DmlExecutionProvider"
+
+    # La disponibilidad declarada por ORT no garantiza que el driver D3D12
+    # pueda crear una sesión. El modelo identidad mantiene esta prueba barata.
+    try:
+        from onnx import TensorProto, helper
+
+        graph = helper.make_graph(
+            [
+                helper.make_node("Identity", ["input"], ["output"]),
+            ],
+            "neurohub_directml_probe",
+            [
+                helper.make_tensor_value_info(
+                    "input", TensorProto.FLOAT, [1, 1],
+                ),
+            ],
+            [
+                helper.make_tensor_value_info(
+                    "output", TensorProto.FLOAT, [1, 1],
+                ),
+            ],
+        )
+        model = helper.make_model(
+            graph,
+            opset_imports=[helper.make_opsetid("", 17)],
+            ir_version=8,
+        )
+        session = ort.InferenceSession(
+            model.SerializeToString(),
+            providers=["DmlExecutionProvider"],
+        )
+        if "DmlExecutionProvider" not in session.get_providers():
+            return False, f"proveedor efectivo: {session.get_providers()}"
+    except Exception as exc:
+        return False, f"no se pudo crear sesión DirectML: {exc}"
+    return True, "sesión ONNX Runtime creada con DmlExecutionProvider"
+
+
 def detect_inference_backends() -> tuple[InferenceBackend, ...]:
     """Devuelve los backends instalados, en orden de preferencia."""
     backends: list[InferenceBackend] = []
 
-    try:
-        import onnxruntime as ort
-        providers = set(ort.get_available_providers())
-    except Exception as exc:
-        providers = set()
-        ort_error = f"ONNX Runtime no disponible: {exc}"
-    else:
-        ort_error = "ONNX Runtime no expone DirectML"
+    directml_available, directml_reason = _directml_runtime_check()
 
-    if "DmlExecutionProvider" in providers:
+    if directml_available:
         backends.append(
             InferenceBackend(
                 name="amd-directml",
                 provider="DmlExecutionProvider",
                 device="AMD Radeon / DirectML",
                 available=True,
-                reason="ONNX Runtime confirma DmlExecutionProvider",
+                reason=directml_reason,
             )
         )
     else:
@@ -50,7 +90,7 @@ def detect_inference_backends() -> tuple[InferenceBackend, ...]:
                 provider=None,
                 device="AMD Radeon / DirectML",
                 available=False,
-                reason=ort_error,
+                reason=directml_reason,
             )
         )
 

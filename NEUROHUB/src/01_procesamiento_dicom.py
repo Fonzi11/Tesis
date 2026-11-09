@@ -289,6 +289,12 @@ def _dispositivo_totalsegmentator():
         valor = os.environ.get(variable)
         if valor in ("cpu", "gpu"):
             return valor
+        if valor in ("directml", "amd", "dml"):
+            raise RuntimeError(
+                "TotalSegmentator/nnUNet no admite DirectML: su interfaz solo "
+                "acepta cpu, cuda/gpu o mps. DirectML queda reservado para "
+                "modelos ONNX exportados y validados."
+            )
     if os.environ.get("NEUROHUB_ENABLE_CUDA") != "1":
         return "cpu"
     try:
@@ -345,6 +351,10 @@ def run_ai_segmentation(input_nifti, output_dir="segmentaciones_ai", fast_mode=F
     print(f"\n[2/3] Iniciando inferencia de IA con TotalSegmentator...")
     os.makedirs(output_dir, exist_ok=True)
     _ensure_totalsegmentator_runtime_requirements()
+    print(
+        "   -> Backend de TotalSegmentator: CPU/nnUNet. "
+        "DirectML no es un dispositivo válido para este modelo."
+    )
 
     if fast_mode:
         print("   -> Modo RAPIDO (--fast): resolucion ~3mm. Mas veloz, menos detalle de borde.")

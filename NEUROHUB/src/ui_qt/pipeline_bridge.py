@@ -19,6 +19,7 @@ resultados se devuelven como senales, de modo que la UI nunca se congela.
 import os
 import sys
 import traceback
+from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
 
@@ -196,13 +197,13 @@ class PipelineWorker(QObject):
         self.finished.emit(ok, mensaje)
 
     def _asegurar_volumen_en_salidas(self, nifti_path):
-        """Copia la imagen del paciente a `salidas/volumen_paciente.nii.gz`.
+        """Copia la imagen del paciente junto a sus segmentaciones.
 
         Se omite si ya esta, si el origen es el mismo fichero o si la copia
         existente es al menos tan reciente como la original: en ese caso ya
         hay una copia valida y reescribirla solo gastaria I/O.
         """
-        destino = os.path.join(SALIDAS_DIR, "volumen_paciente.nii.gz")
+        destino = os.path.join(self.output_dir, "volumen_paciente.nii.gz")
         try:
             if os.path.exists(destino):
                 if (os.path.normcase(os.path.abspath(destino))
@@ -222,8 +223,12 @@ class PipelineWorker(QObject):
     # ------------------------------------------------------------------
     def _ejecutar_pipeline(self):
         os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(MALLAS_DIR, exist_ok=True)
-        os.makedirs(FBX_DIR, exist_ok=True)
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self.mallas_dir = os.path.join(
+            os.path.dirname(self.output_dir), "mallas", run_id)
+        os.makedirs(self.mallas_dir, exist_ok=True)
+        os.makedirs(os.path.join(os.path.dirname(self.output_dir), "fbx"),
+                    exist_ok=True)
 
         import importlib
         pipeline_01 = importlib.import_module("01_procesamiento_dicom")
@@ -355,6 +360,9 @@ class PipelineWorker(QObject):
         self._info("=" * 60, "HEADER")
         return True
 
+
+
+
     # ------------------------------------------------------------------
     def _limpiar_mascara_del_modo_opuesto(self):
         """
@@ -446,7 +454,10 @@ class PipelineWorker(QObject):
             return
 
         try:
-            resultados = sc.generar_mallas_3d(salida_dir=MALLAS_DIR)
+            resultados = sc.generar_mallas_3d(
+                salida_dir=self.mallas_dir,
+                segmentaciones_dir=self.output_dir,
+            )
         except Exception as e:
             self._info(f"Error generando mallas: {e}", "ERROR")
             self._info(traceback.format_exc(), "ERROR")
@@ -462,6 +473,30 @@ class PipelineWorker(QObject):
             caras_txt = f"{len(caras):,} caras" if caras is not None else ""
             self._info(f"Modelo '{nombre}': {os.path.basename(stl)} {caras_txt}".strip(),
                        "SUCCESS")
+        from informes_modelos import generar_informes
+        mascaras = {}
+        for nombre in resultados:
+            if nombre == "tumor":
+                mascaras[nombre] = next(
+                    (os.path.join(self.output_dir, n) for n in
+                     ("tumor_brats.nii.gz", "tumor_heuristica.nii.gz",
+                      "tumor.nii.gz")
+                     if os.path.isfile(os.path.join(self.output_dir, n))),
+                    "")
+            else:
+                mascaras[nombre] = os.path.join(
+                    self.output_dir, nombre + ".nii.gz")
+        generar_informes(
+            self.mallas_dir,
+            os.path.join(os.path.dirname(self.output_dir), "informes",
+                         os.path.basename(self.mallas_dir)),
+            mascaras=mascaras,
+            operaciones=[
+                "Segmentación anatómica del estudio.",
+                "Reconstrucción de superficies 3D.",
+                "Suavizado y control de calidad de malla.",
+                "Exportación STL versionada sin sobrescribir ejecuciones previas.",
+            ])
 
     # ------------------------------------------------------------------
     def _generar_vistas_2d(self, nifti_path):
@@ -479,9 +514,10 @@ class PipelineWorker(QObject):
         try:
             import importlib
             slices = importlib.import_module("04_slices_2d")
-            os.makedirs(SLICES_DIR, exist_ok=True)
-            slices.generar_vistas_2d(nifti_path, mask, SLICES_DIR)
-            self._info(f"Vistas 2D generadas en {SLICES_DIR}", "SUCCESS")
+            slices_dir = os.path.join(self.output_dir, "vistas_2d")
+            os.makedirs(slices_dir, exist_ok=True)
+            slices.generar_vistas_2d(nifti_path, mask, slices_dir)
+            self._info(f"Vistas 2D generadas en {slices_dir}", "SUCCESS")
         except Exception as e:
             self._info(f"No se pudieron generar las vistas 2D: {e}", "WARNING")
 
@@ -489,6 +525,164 @@ class PipelineWorker(QObject):
 # =============================================================================
 # MALLA 3D A PARTIR DE LA MÁSCARA DELINEADA A MANO
 # =============================================================================
+class ClinicalCTAWorker(QObject):
+    """Ejecuta el flujo CTA sin bloquear la interfaz."""
+
+    log = Signal(str, str)
+    progress = Signal(float)
+    finished = Signal(bool, str)
+
+    def __init__(self, input_path, output_dir, approved_by=None):
+        super().__init__()
+        self.input_path = input_path
+        self.output_dir = output_dir
+        self.approved_by = approved_by
+        self._cancelado = False
+        self.report = {}
+
+    def cancelar(self):
+        self._cancelado = True
+
+    def run(self):
+        try:
+            if self._cancelado:
+                self.finished.emit(False, "Flujo CTA cancelado")
+                return
+            self.log.emit("Validando geometría DICOM y serie CTA...", "PROGRESS")
+            self.progress.emit(0.25)
+            from ..clinical_pipeline import run_cta_pipeline
+            report = run_cta_pipeline(
+                self.input_path, self.output_dir, approved_by=self.approved_by,
+                approval_notes="Aprobación humana registrada desde NEUROHUB.",
+            )
+            self.progress.emit(1.0)
+            self.log.emit(
+                "SEG DICOM exportado tras aprobación humana."
+                if self.approved_by else
+                "Máscara vascular CTA candidata exportada a NRRD. "
+                "La aprobación clínica sigue pendiente.",
+                "SUCCESS" if self.approved_by else "WARNING",
+            )
+            self.report = report
+            self.finished.emit(True, "Flujo CTA completado; revisión pendiente")
+        except Exception as exc:
+            self.log.emit(f"Flujo CTA fallido: {exc}", "ERROR")
+            self.finished.emit(False, str(exc))
+
+
+class FreeSurferWorker(QObject):
+    """Ejecuta FreeSurfer sobre el estudio activo sin bloquear Qt."""
+
+    log = Signal(str, str)
+    progress = Signal(float)
+    finished = Signal(bool, str)
+
+    def __init__(self, input_path, subjects_dir, output_dir, subject,
+                 license_path):
+        super().__init__()
+        self.input_path = input_path
+        self.subjects_dir = subjects_dir
+        self.output_dir = output_dir
+        self.subject = subject
+        self.license_path = license_path
+        self._cancelado = False
+
+    def cancelar(self):
+        # recon-all se ejecuta como proceso externo y no se mata a mitad de
+        # una etapa; esta bandera evita iniciar trabajo si se cancela antes.
+        self._cancelado = True
+
+    def run(self):
+        try:
+            if self._cancelado:
+                self.finished.emit(False, "Segmentación FreeSurfer cancelada")
+                return
+            self.log.emit("=" * 60, "HEADER")
+            self.log.emit("INICIANDO SEGMENTACIÓN FREESURFER", "HEADER")
+            self.log.emit("La reconstrucción anatómica puede tardar horas.",
+                          "WARNING")
+            self.progress.emit(0.05)
+
+            import importlib
+            pipeline_01 = importlib.import_module("01_procesamiento_dicom")
+            os.makedirs(self.output_dir, exist_ok=True)
+            entrada = pipeline_01.resolve_input_volume(
+                self.input_path,
+                os.path.join(self.output_dir, "freesurfer_input.nii.gz"),
+            )
+            if not entrada or not os.path.isfile(entrada):
+                raise RuntimeError(
+                    "No se pudo convertir el estudio a un volumen NIfTI.")
+
+            entrada = self._normalizar_3d(entrada)
+            self.log.emit(f"Entrada anatómica: {entrada}", "SUCCESS")
+            self.progress.emit(0.15)
+
+            from .. import freesurfer_bridge
+            log_path = os.path.join(
+                os.path.dirname(self.subjects_dir),
+                "%s_recon-all.log" % self.subject)
+            freesurfer_bridge.segmentar(
+                entrada, self.subject, self.subjects_dir,
+                os.path.join(self.output_dir,
+                             "freesurfer_aseg.nii.gz"),
+                license_path=self.license_path, log_path=log_path)
+            import segmentacion_completa as sc
+            run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            mallas_dir = os.path.join(
+                os.path.dirname(self.output_dir), "mallas", self.subject,
+                run_id)
+            informes_dir = os.path.join(
+                os.path.dirname(self.output_dir), "informes", self.subject,
+                run_id)
+            tumor = next(
+                (os.path.join(self.output_dir, n) for n in
+                 ("tumor_manual.nii.gz", "tumor_brats.nii.gz", "tumor.nii.gz")
+                 if os.path.isfile(os.path.join(self.output_dir, n))), None)
+            sc.generar_mallas_freesurfer_aseg(
+                os.path.join(self.output_dir, "freesurfer_aseg.nii.gz"),
+                mallas_dir, mascara_tumor=tumor, informes_dir=informes_dir)
+            self.log.emit(
+                f"Superficies FreeSurfer versionadas en: {mallas_dir}", "SUCCESS")
+            self.log.emit(f"Informes detallados en: {informes_dir}", "INFO")
+            self.progress.emit(1.0)
+            self.log.emit(
+                "Segmentación FreeSurfer completada: freesurfer_aseg.nii.gz",
+                "SUCCESS")
+            self.log.emit(f"Reconstrucción guardada en: "
+                          f"{os.path.join(self.subjects_dir, self.subject)}",
+                          "INFO")
+            self.finished.emit(True, "FreeSurfer completado")
+        except Exception as exc:
+            self.log.emit(f"FreeSurfer falló: {exc}", "ERROR")
+            self.log.emit(traceback.format_exc(), "ERROR")
+            self.finished.emit(False, str(exc))
+
+    def _normalizar_3d(self, entrada):
+        """Aísla un primer volumen cuando el NIfTI trae ejes singleton."""
+        import nibabel as nib
+        import numpy as np
+
+        imagen = nib.load(entrada)
+        forma = imagen.shape
+        if len(forma) == 3:
+            return entrada
+        if len(forma) < 3 or int(np.prod(forma[3:])) <= 1:
+            datos = np.asarray(imagen.dataobj).reshape(forma[:3])
+        elif len(forma) == 4:
+            datos = np.asarray(imagen.dataobj)[..., 0]
+            self.log.emit(
+                "El estudio es 4D; se usará el primer volumen anatómico.",
+                "WARNING")
+        else:
+            raise ValueError(
+                "FreeSurfer necesita un NIfTI 3D T1/T1w; dimensiones recibidas: "
+                f"{forma}")
+        salida = os.path.join(self.output_dir, "freesurfer_input_3d.nii.gz")
+        nib.save(nib.Nifti1Image(datos, imagen.affine, imagen.header), salida)
+        return salida
+
+
 class MeshFromMaskWorker(QObject):
     """Convierte una máscara NIfTI delineada a mano en una malla STL.
 
@@ -686,6 +880,8 @@ class FbxExportWorker(QObject):
     # ------------------------------------------------------------------
     def _exportar(self):
         import importlib
+        import shutil
+        import subprocess
         pipeline_01 = importlib.import_module("01_procesamiento_dicom")
 
         stls = self._stl_disponibles()
@@ -697,6 +893,65 @@ class FbxExportWorker(QObject):
         self.log.emit("=" * 60, "HEADER")
         self.log.emit(f"EXPORTACION A FBX ({len(stls)} mallas)", "HEADER")
         self.log.emit("=" * 60, "HEADER")
+
+        # ``bpy`` no suele estar disponible en el Python de la aplicación.
+        # En ese caso se usa el ejecutable oficial de Blender y se mantiene el
+        # directorio del estudio como único ámbito de entrada y salida.
+        try:
+            import bpy  # noqa: F401
+        except ImportError:
+            blender = shutil.which("blender.exe") or shutil.which("blender")
+            if not blender:
+                for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
+                    root = os.path.join(base, "Blender Foundation")
+                    if not os.path.isdir(root):
+                        continue
+                    versions = sorted(
+                        (name for name in os.listdir(root)
+                         if os.path.isdir(os.path.join(root, name))),
+                        reverse=True,
+                    )
+                    for version in versions:
+                        candidate = os.path.join(root, version, "blender.exe")
+                        if os.path.isfile(candidate):
+                            blender = candidate
+                            break
+                    if blender:
+                        break
+            runner = os.path.join(BASE_DIR, "herramientas", "blender_export.py")
+            if not blender or not os.path.isfile(runner):
+                self.log.emit(
+                    "Blender no esta disponible como ejecutable externo.", "ERROR")
+                return False, "Blender no esta instalado o no esta en PATH"
+            self.log.emit(f"Usando Blender externo: {blender}", "PROGRESS")
+            try:
+                proc = subprocess.run(
+                    [
+                        blender, "--background", "--python", runner, "--",
+                        os.path.abspath(self.stl_dir),
+                        os.path.abspath(self.fbx_dir),
+                    ],
+                    capture_output=True, text=True, timeout=600,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                self.log.emit(f"Blender no pudo ejecutarse: {error}", "ERROR")
+                return False, f"Blender no pudo ejecutarse: {error}"
+            if proc.stdout:
+                for line in proc.stdout.splitlines():
+                    self.log.emit(line, "PROGRESS")
+            if proc.returncode != 0:
+                if proc.stderr:
+                    self.log.emit(proc.stderr.rstrip(), "ERROR")
+                return False, "Blender finalizo con error"
+            exportadas = [
+                os.path.join(self.fbx_dir, os.path.splitext(nombre)[0] + ".fbx")
+                for nombre, _ in stls
+                if os.path.isfile(
+                    os.path.join(self.fbx_dir, os.path.splitext(nombre)[0] + ".fbx")
+                )
+            ]
+            self.progress.emit(1.0)
+            return bool(exportadas), f"{len(exportadas)} FBX exportados con Blender"
 
         exportadas = []
         for i, (nombre, ruta) in enumerate(stls):

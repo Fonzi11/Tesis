@@ -14,6 +14,8 @@ verificacion integral.
     python launcher.py verificar --todo     # verificacion completa
     python launcher.py radiomics --help     # extraccion sobre un NIfTI
     python launcher.py raidionics estado    # si Docker puede correr Raidionics
+    python launcher.py freesurfer estado    # si FreeSurfer puede correr
+    python launcher.py freesurfer recon-all imagen.nii.gz sujeto
     python launcher.py doctor               # estado de TODO el entorno
 
 Cada subcomando se puede pedir por separado, y todos comparten la misma
@@ -143,6 +145,20 @@ def cmd_doctor(_args):
     # Slicer: basta con que el ejecutable este, no hace falta arrancarlo.
     slicer = _buscar_slicer()
     print("  3D Slicer  : %s" % (slicer or "no encontrado"))
+    blender = _buscar_blender()
+    print("  Blender     : %s" % (blender or "no encontrado"))
+
+    try:
+        _preparar_rutas()
+        from freesurfer_bridge import detectar, diagnostico
+        fs = detectar()
+        if fs.disponible:
+            print("  FreeSurfer  : disponible (%s, %s)" %
+                  (fs.backend, fs.recon_all))
+        else:
+            print("  FreeSurfer  : no disponible -> %s" % diagnostico())
+    except Exception as exc:                        # pragma: no cover
+        print("  FreeSurfer  : no se pudo comprobar (%s)" % exc)
 
     # Raidionics: a diferencia de Slicer, aqui importa el DAEMON, no el binario.
     try:
@@ -175,6 +191,28 @@ def _buscar_slicer():
         carpeta = os.path.join(base, "3D Slicer 5.12.3", "Slicer.exe")
         if os.path.exists(carpeta):
             return carpeta
+    return None
+
+
+def _buscar_blender():
+    """Ruta de Blender ejecutable, sin confundirla con el paquete ``bpy``."""
+    import shutil
+    encontrado = shutil.which("blender") or shutil.which("blender.exe")
+    if encontrado:
+        return encontrado
+    for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
+        carpeta = os.path.join(base, "Blender Foundation")
+        if not os.path.isdir(carpeta):
+            continue
+        versiones = sorted(
+            (nombre for nombre in os.listdir(carpeta)
+             if os.path.isdir(os.path.join(carpeta, nombre))),
+            reverse=True,
+        )
+        for version in versiones:
+            candidato = os.path.join(carpeta, version, "blender.exe")
+            if os.path.isfile(candidato):
+                return candidato
     return None
 
 
@@ -239,6 +277,73 @@ def cmd_raidionics(args):
     if not resumen.get("informes"):
         print("  (sin informe clinico: este pipeline solo segmenta)")
     print("\nResultados en %s" % salida)
+
+
+# =============================================================================
+# FREESURFER: motor externo nativo o WSL
+# =============================================================================
+def cmd_freesurfer(args):
+    """Diagnóstico y operaciones reproducibles de FreeSurfer."""
+    _preparar_rutas()
+    from freesurfer_bridge import (detectar, diagnostico, recon_all, convertir,
+                                   exportar_estadisticas, exportar_mascara,
+                                   segmentar)
+
+    if args.accion == "estado":
+        fs = detectar()
+        if not fs.disponible:
+            print("FreeSurfer NO disponible.")
+            print("  %s" % diagnostico())
+            return 1
+        print("FreeSurfer disponible.")
+        print("  backend : %s" % fs.backend)
+        print("  comando : %s" % fs.recon_all)
+        if fs.wsl_distribution:
+            print("  distro  : %s" % fs.wsl_distribution)
+        return 0
+
+    sujeto = args.sujeto or (
+        args.estudio if args.accion in ("mascara", "estadisticas") else None)
+    try:
+        log = args.log
+        if args.accion in ("recon-all", "segmentar"):
+            subjects = args.subjects_dir or os.path.join(
+                PADRE, "salidas", "freesurfer", "subjects")
+            if args.accion == "recon-all":
+                recon_all(args.estudio, args.sujeto, subjects,
+                          license_path=args.licencia, log_path=log)
+                print("Reconstrucción completada: %s" %
+                      os.path.join(subjects, args.sujeto))
+            else:
+                salida = args.salida or os.path.join(
+                    PADRE, "salidas", "segmentaciones_ai",
+                    "%s_freesurfer_aseg.nii.gz" % args.sujeto)
+                segmentar(args.estudio, args.sujeto, subjects, salida,
+                          license_path=args.licencia, log_path=log)
+                print("Segmentación FreeSurfer exportada: %s" % salida)
+        elif args.accion == "convertir":
+            convertir(args.estudio, args.salida, log_path=log,
+                      license_path=args.licencia)
+            print("Conversión completada: %s" % args.salida)
+        elif args.accion == "mascara":
+            subjects = args.subjects_dir or os.path.join(
+                PADRE, "salidas", "freesurfer", "subjects")
+            if args.etiqueta is None:
+                raise ValueError("Falta --etiqueta para exportar una máscara.")
+            exportar_mascara(subjects, sujeto, args.etiqueta,
+                             args.salida, log_path=log)
+            print("Máscara exportada: %s" % args.salida)
+        elif args.accion == "estadisticas":
+            subjects = args.subjects_dir or os.path.join(
+                PADRE, "salidas", "freesurfer", "subjects")
+            archivos = exportar_estadisticas(
+                subjects, sujeto, args.salida, log_path=log)
+            for archivo in archivos:
+                print("Tabla: %s" % archivo)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        print("FreeSurfer falló: %s" % exc)
+        return 1
+    return 0
 
 
 # =============================================================================
@@ -366,6 +471,24 @@ def cmd_ui(_args):
     return abrir()
 
 
+def cmd_casos(_args):
+    """Lista los diez espacios clínicos organizados y sus fuentes."""
+    base = os.path.join(PADRE, "data", "casos_clinicos")
+    if not os.path.isdir(base):
+        print("No existe la carpeta organizada: %s" % base)
+        return 1
+    print("Casos organizados: %s" % base)
+    for categoria in ("aneurismas", "tumores"):
+        carpeta = os.path.join(base, categoria)
+        print("\n%s" % categoria.upper())
+        for caso in sorted(os.listdir(carpeta)) if os.path.isdir(carpeta) else []:
+            fuentes = os.path.join(carpeta, caso, "fuentes")
+            nombres = sorted(os.listdir(fuentes)) if os.path.isdir(fuentes) else []
+            estado = "disponible" if nombres else "pendiente de fuente"
+            print("  %-16s %-20s %s" % (caso, estado, ", ".join(nombres)))
+    return 0
+
+
 
     return 0
 
@@ -374,6 +497,26 @@ def cmd_ui(_args):
 # =============================================================================
 # CLI
 # =============================================================================
+def cmd_unity(args):
+    """Prepara FBX y manifiesto de un estudio para el visor Unity MR."""
+    _preparar_rutas()
+    from herramientas.preparar_unity import preparar
+
+    unity_dir = args.unity or os.path.join(RAIZ, "unity", "NeuroHubMR")
+    try:
+        resultado = preparar(args.estudio, unity_dir)
+    except (FileNotFoundError, RuntimeError) as error:
+        print("No se pudo preparar Unity: %s" % error)
+        return 1
+    print("  Proyecto Unity : %s" % unity_dir)
+    print("  Estudio        : %s" % resultado["studyId"])
+    print("  Modelos        : %s" % ", ".join(
+        modelo["id"] for modelo in resultado["models"]))
+    print("  Importa la carpeta en Unity y ejecuta "
+          "NEUROHUB > MR > Build Study Scene.")
+    return 0
+
+
 def construir_parser():
     """
     Parser con un subcomando por funcionalidad.
@@ -391,6 +534,10 @@ def construir_parser():
 
     sub.add_parser("ui", help="abre la ventana principal (por defecto)")
     sub.add_parser("doctor", help="estado de Python, dependencias y motores")
+    sub.add_parser("casos", help="lista los 5 aneurismas y 5 espacios de tumor")
+    p_uni = sub.add_parser("unity", help="prepara un estudio para realidad mixta")
+    p_uni.add_argument("estudio", help="carpeta con subcarpeta fbx/")
+    p_uni.add_argument("--unity", help="ruta del proyecto Unity MR")
 
     p_rad = sub.add_parser("radiomics", help="extrae descriptores de un NIfTI")
     p_rad.add_argument("estudio", nargs="?", help="imagen NIfTI de entrada")
@@ -402,6 +549,23 @@ def construir_parser():
                        help="'estado' diagnostica, 'extraer' ejecuta el motor")
     p_rai.add_argument("estudio", nargs="?", help="imagen NIfTI para 'extraer'")
     p_rai.add_argument("--salida", help="carpeta donde dejar el informe")
+
+    p_fs = sub.add_parser("freesurfer",
+                           help="procesamiento anatómico FreeSurfer (nativo/WSL)")
+    p_fs.add_argument("accion", choices=["estado", "recon-all", "segmentar",
+                                         "convertir", "mascara", "estadisticas"])
+    p_fs.add_argument("estudio", nargs="?",
+                      help="NIfTI/MGH de entrada para recon-all o convertir")
+    p_fs.add_argument("sujeto", nargs="?",
+                      help="identificador del sujeto de FreeSurfer")
+    p_fs.add_argument("--subjects-dir",
+                      help="carpeta SUBJECTS_DIR (por defecto salidas/freesurfer)")
+    p_fs.add_argument("--licencia", help="ruta a license.txt")
+    p_fs.add_argument("--etiqueta", type=int,
+                      help="ID de etiqueta para exportar una máscara de aseg")
+    p_fs.add_argument("--salida",
+                      help="imagen de salida o carpeta de estadísticas")
+    p_fs.add_argument("--log", help="archivo donde guardar stdout/stderr")
 
     p_ver = sub.add_parser("verificar", help="etapas de verificacion integral")
     p_ver.add_argument("--todo", action="store_true",
@@ -418,7 +582,8 @@ def construir_parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    COMANDOS = {"ui", "doctor", "radiomics", "raidionics", "verificar"}
+    COMANDOS = {"ui", "doctor", "casos", "unity", "radiomics", "raidionics",
+                "freesurfer", "verificar"}
     # La ayuda tiene que verse completa y no caer en `ui`, que es el valor por
     # defecto: sin este caso, `launcher.py --help` abriria la ventana.
     if argv and argv[0] in ("-h", "--help", "help"):
@@ -432,8 +597,11 @@ def main(argv=None):
     return {
         "ui": cmd_ui,
         "doctor": cmd_doctor,
+        "casos": cmd_casos,
+        "unity": cmd_unity,
         "radiomics": cmd_radiomics,
         "raidionics": cmd_raidionics,
+        "freesurfer": cmd_freesurfer,
         "verificar": cmd_verificar,
     }[args.comando](args)
 

@@ -1,0 +1,48 @@
+{
+  "schema": "neurohub-mr-study-v1",
+  "studyId": "prueba_live_aneurisma_1_tac",
+  "sourceDirectory": "D:\\Tesis\\NEUROHUB\\salidas\\prueba_live_aneurisma_1_tac\\resultado",
+  "generatedAtUtc": "2026-11-02T21:34:59.018803+00:00",
+  "models": [
+    {
+      "color": [
+        0.65,
+        0.67,
+        0.72,
+        1.0
+      ],
+      "opacity": 0.28,
+      "id": "cerebro",
+      "file": "cerebro.fbx"
+    },
+    {
+      "color": [
+        0.9,
+        0.88,
+        0.82,
+        1.0
+      ],
+      "opacity": 0.12,
+      "id": "craneo",
+      "file": "craneo.fbx"
+    },
+    {
+      "color": [
+        0.78,
+        0.15,
+        0.86,
+        1.0
+      ],
+      "opacity": 0.92,
+      "id": "tumor",
+      "file": "tumor.fbx"
+    }
+  ],
+  "clinicalReviewRequired": true,
+  "renderProfile": {
+    "pipeline": "URP",
+    "antiAliasing": 4,
+    "gpuInstancing": true,
+    "asyncLoad": true
+  }
+}

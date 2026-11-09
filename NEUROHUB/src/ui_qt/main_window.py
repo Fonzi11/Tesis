@@ -29,7 +29,8 @@ from .viewer_2d import Viewer2D
 from .viewer_3d import Viewer3D
 from .study_model import Serie, StudyModel
 from .pipeline_bridge import (
-    PipelineWorker, FbxExportWorker, MeshFromMaskWorker,
+    PipelineWorker, ClinicalCTAWorker, FreeSurferWorker, FbxExportWorker,
+    MeshFromMaskWorker,
 )
 from . import mesh_store
 from . import pbr
@@ -107,57 +108,62 @@ class MainWindow(QMainWindow):
     def _construir_cabecera(self):
         """Barra superior: marca, datos del caso y progreso."""
         self._header = QWidget()
-        self._header.setFixedHeight(102)
+        self._header.setFixedHeight(88)
         self._header.setStyleSheet(
             f"background-color: {COLOR_PANEL};"
             f" border-bottom: 1px solid {COLOR_BORDE};")
         lay = QHBoxLayout(self._header)
-        lay.setContentsMargins(14, 8, 14, 8)
-        lay.setSpacing(14)
+        lay.setContentsMargins(16, 9, 16, 9)
+        lay.setSpacing(10)
 
         # Marca + datos del caso.
         caja = QVBoxLayout()
-        caja.setSpacing(1)
+        caja.setSpacing(3)
         tit = QLabel("NEUROHUB")
         tit.setStyleSheet(
-            f"color: {COLOR_ACENTO}; font-size: 20px; font-weight: bold;"
+            f"color: {COLOR_ACENTO}; font-size: 19px; font-weight: 700;"
             f" letter-spacing: 2px; border: none;")
         self._subtitulo = QLabel("Sin estudio cargado")
         self._subtitulo.setStyleSheet(
-            f"color: {COLOR_TEXTO_SEC}; font-size: 11px; border: none;")
+            f"color: {COLOR_TEXTO_SEC}; font-size: 10px; border: none;")
+        self._subtitulo.setToolTip("Estudio y número de estructuras disponibles")
         caja.addWidget(tit)
         caja.addWidget(self._subtitulo)
         lay.addLayout(caja)
         lay.addSpacing(10)
 
         # Tarjetas de estado (equivalen a las StatusCard de `main.py`).
-        self.card_estructuras = Card("ESTRUCTURAS", "0")
-        self.card_visibles = Card("VISIBLES", "0")
-        self.card_estado = Card("ESTADO", "Inactivo")
-        self.card_backend = Card("INFERENCIA", "AMD")
+        self.card_estructuras = Card("ESTRUCTURAS", "0", accent=COLOR_ACENTO)
+        self.card_visibles = Card("VISIBLES", "0", accent=COLOR_OK)
+        self.card_estado = Card("ESTADO", "Inactivo", accent=COLOR_TEXTO_SEC)
+        self.card_backend = Card("INFERENCIA", "AMD", accent=COLOR_OK)
         self.card_backend.setToolTip(
             "Backend real de inferencia. El render 3D usa OpenGL de la GPU; "
             "la reconstrucción de superficies puede usar CPU.")
         for c in (self.card_estructuras, self.card_visibles, self.card_estado,
                   self.card_backend):
-            c.setFixedWidth(148)
+            c.setFixedSize(132, 70)
             lay.addWidget(c)
         self._actualizar_backend()
         lay.addStretch(1)
 
         # Progreso circular + acciones de vista.
-        self.barra_progreso = QCircularProgressBar(diameter=68)
+        self.barra_progreso = QCircularProgressBar(diameter=64)
+        self.barra_progreso.setToolTip("Progreso de la operación actual")
         lay.addWidget(self.barra_progreso)
 
         self._btn_reset = QPushButton("⟳  Restablecer")
+        self._btn_reset.setObjectName("headerAction")
         self._btn_reset.setToolTip("Reencuadrar la camara 3D")
         lay.addWidget(self._btn_reset)
 
         self._btn_snapshot = QPushButton("▣  Guardar imagen")
+        self._btn_snapshot.setObjectName("headerAction")
         self._btn_snapshot.setToolTip("Exportar la vista 3D actual a PNG")
         lay.addWidget(self._btn_snapshot)
 
         self._btn_guardar_2d = QPushButton("▧  Guardar corte")
+        self._btn_guardar_2d.setObjectName("headerAction")
         self._btn_guardar_2d.setToolTip("Exportar el corte 2D visible a PNG")
         lay.addWidget(self._btn_guardar_2d)
 
@@ -238,9 +244,14 @@ class MainWindow(QMainWindow):
         """
         modelos = mesh_store.escanear_mallas()
         cortes = mesh_store.listar_cortes()
-        if not modelos and not cortes:
+        volumen_existente = mesh_store.buscar_volumen(
+            mesh_store.SALIDAS_DIR, mesh_store.SALIDAS_DIR)
+        mascaras_existentes = mesh_store.listar_mascaras_tumor(
+            mesh_store.SEG_AI_DIR)
+        if not modelos and not cortes and not volumen_existente and not mascaras_existentes:
             self.consola.log("Cargue un estudio para comenzar", "INFO")
             self.panel_estudio.set_procesando(False, hay_mallas=False)
+            self._actualizar_tarjetas()
             return
 
         nombre = "Salidas del pipeline"
@@ -249,6 +260,10 @@ class MainWindow(QMainWindow):
         if cortes:
             self.consola.log(f"{len(cortes)} cortes 2D en {mesh_store.SLICES_DIR}",
                              "INFO")
+        if mascaras_existentes:
+            self.consola.log(
+                f"{len(mascaras_existentes)} máscaras NIfTI en "
+                f"{mesh_store.SEG_AI_DIR}", "INFO")
 
         # Una unica serie "Salidas" apuntando a las rutas globales.
         serie = Serie(uid="salidas", nombre=nombre,
@@ -294,8 +309,9 @@ class MainWindow(QMainWindow):
             # existente; si venía de otro caso, `cargar_mascara` levantaba
             # ValueError, la excepción caía en el `except` de abajo y el visor
             # se quedaba vacío, es decir, sin pincel y sin borrador.
+            rutas = mesh_store.rutas_serie(ruta_base if ruta_base else None)
             candidatas = mesh_store.listar_mascaras_tumor(
-                ruta_base, mesh_store.SALIDAS_DIR)
+                rutas["segmentaciones"])
             mascara = mesh_store.buscar_mascara_compatible(candidatas,
                                                           volumen_path)
             if candidatas and not mascara:
@@ -310,6 +326,11 @@ class MainWindow(QMainWindow):
                 + (f" + {os.path.basename(mascara)}" if mascara else " (sin máscara)")
                 + f" | ventana {volumen_2d.modalidad or 'AUTO'}",
                 "SUCCESS")
+            if mascara and os.path.basename(mascara).lower() == \
+                    "freesurfer_aseg.nii.gz":
+                self.consola.log(
+                    "FreeSurfer ASEG visible como overlay multietiqueta en "
+                    "Cortes 2D.", "SUCCESS")
             return True
         except Exception as e:
             self.visor_2d.set_volumen(None)
@@ -379,7 +400,8 @@ class MainWindow(QMainWindow):
         # `color_rgba` es imprescindible: el visor 3D lo usa para pintar el
         # actor. Sin el, `Viewer3D._build_actor` cae al gris por defecto y toda
         # la escena sale descolorida. Se resuelve aqui con `resolve_pbr` (que
-        # aplica los alias arterias/venas/vasos -> venas_arterias) en vez de
+        # aplica los alias de arterias/venas/vasos a sus materiales canonicos)
+        # en vez de
         # confiar en la capa, que solo guarda el color hexadecimal del panel.
         modelos = {k: {"label": c["label"], "display": c["color"],
                        "stl": c["ruta"],
@@ -421,8 +443,24 @@ class MainWindow(QMainWindow):
     def _actualizar_tarjetas(self):
         total = len(self.panel_capas.claves())
         visibles = self.modelo.total_capas_visibles()
-        self.card_estructuras.set_value(str(total))
-        self.card_visibles.set_value(str(visibles))
+        serie = self.modelo.serie_activa
+        cortes = len(self.modelo.slices_2d or {})
+        self.card_estructuras.set_value(
+            str(total), COLOR_ACENTO,
+            "capas 3D disponibles" if total else "sin reconstrucción")
+        self.card_visibles.set_value(
+            str(visibles), COLOR_OK if visibles else COLOR_TEXTO_SEC,
+            "mostradas en escena" if visibles else "ninguna seleccionada")
+        self.card_estado.setToolTip(
+            "Estado del pipeline y de la sesión actual")
+        self._btn_reset.setEnabled(bool(total))
+        self._btn_snapshot.setEnabled(bool(total and visibles))
+        self._btn_guardar_2d.setEnabled(bool(cortes))
+        if serie:
+            self._subtitulo.setText(
+                f"{serie.nombre}  ·  {total} estructuras  ·  {cortes} cortes")
+        else:
+            self._subtitulo.setText("Sin estudio cargado")
 
     # ==================================================================
     # PROCESOS EN SEGUNDO PLANO (QThread)
@@ -488,6 +526,12 @@ class MainWindow(QMainWindow):
             self.ejecutar_pipeline()
         elif accion == "exportar":
             self.exportar_fbx()
+        elif accion == "cta":
+            self.ejecutar_cta()
+        elif accion == "freesurfer":
+            self.ejecutar_freesurfer()
+        elif accion == "cta_aprobar":
+            self.aprobar_cta()
         elif accion == "cancelar":
             self.cancelar()
 
@@ -599,9 +643,105 @@ class MainWindow(QMainWindow):
         self.panel_estudio.set_procesando(True, hay_mallas=True)
         self.statusBar().showMessage("Ejecutando pipeline...")
 
+        rutas = mesh_store.rutas_serie(ruta if os.path.isdir(ruta) else None)
         self._lanzar_worker(PipelineWorker(
-            ruta, generar_slices=self.panel_estudio.generar_slices(),
+            ruta, output_dir=rutas["segmentaciones"],
+            generar_slices=self.panel_estudio.generar_slices(),
             modo=self.panel_estudio.modo()))
+
+    def ejecutar_freesurfer(self):
+        """Ejecuta FreeSurfer sobre el estudio activo y carga su ``aseg``."""
+        if self._thread is not None:
+            self.consola.log("Ya hay un proceso en curso", "WARNING")
+            return
+        ruta = self.panel_estudio.ruta()
+        if not ruta:
+            self.consola.log("Seleccione primero un estudio", "WARNING")
+            return
+
+        licencia, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar licencia de FreeSurfer",
+            os.path.expanduser("~"),
+            "Licencia FreeSurfer (license.txt);;Todos los archivos (*)")
+        if not licencia:
+            self.consola.log(
+                "FreeSurfer necesita una licencia license.txt válida.", "WARNING")
+            return
+
+        serie = self.modelo.serie_activa
+        base = serie.ruta if serie is not None and os.path.isdir(serie.ruta) \
+            else os.path.dirname(ruta) if os.path.isfile(ruta) else ruta
+        rutas = mesh_store.rutas_serie(base)
+        sujeto = self._nombre_sujeto(serie.nombre if serie else base)
+        subjects_dir = os.path.join(
+            mesh_store.RAIZ_DIR, "salidas",
+            "freesurfer", "subjects")
+
+        self._worker_cancelado = False
+        self.barra_progreso.reset("FreeSurfer")
+        self.card_estado.set_value("FreeSurfer", COLOR_ACENTO)
+        self.panel_estudio.set_procesando(True, hay_mallas=True)
+        self.statusBar().showMessage("Ejecutando FreeSurfer...")
+        self.consola.log(
+            f"FreeSurfer: sujeto {sujeto}; salida {rutas['segmentaciones']}",
+            "INFO")
+        self._lanzar_worker(FreeSurferWorker(
+            ruta, subjects_dir, rutas["segmentaciones"], sujeto, licencia))
+
+    @staticmethod
+    def _nombre_sujeto(nombre):
+        """Convierte el nombre visible del estudio en un ID FreeSurfer válido."""
+        import re
+        limpio = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(nombre or "sujeto"))
+        return limpio.strip("._-") or "sujeto"
+
+    def ejecutar_cta(self):
+        """Ejecuta validación CTA y exporta el candidato vascular a NRRD."""
+        if self._thread is not None:
+            self.consola.log("Ya hay un proceso en curso", "WARNING")
+            return
+        ruta = self.panel_estudio.ruta()
+        if not ruta or not os.path.isdir(ruta):
+            self.consola.log(
+                "Seleccione la carpeta DICOM de una serie CTA.", "WARNING")
+            return
+        self._worker_cancelado = False
+        self.barra_progreso.reset("Flujo CTA")
+        self.card_estado.set_value("Validando CTA", COLOR_ACENTO)
+        self.panel_estudio.set_procesando(True, hay_mallas=True)
+        salida = mesh_store.rutas_serie(ruta)["segmentaciones"]
+        self._lanzar_worker(ClinicalCTAWorker(ruta, salida))
+
+    def aprobar_cta(self):
+        """Exporta SEG solo después de una acción explícita del usuario."""
+        if self._thread is not None:
+            self.consola.log("Ya hay un proceso en curso", "WARNING")
+            return
+        ruta = self.panel_estudio.ruta()
+        if not ruta or not os.path.isdir(ruta):
+            self.consola.log("Seleccione primero una carpeta DICOM CTA", "WARNING")
+            return
+        salida = mesh_store.rutas_serie(ruta)["segmentaciones"]
+        nrrd = os.path.join(salida, "vasos_cta.nrrd")
+        if not os.path.exists(nrrd):
+            self.consola.log(
+                "Ejecute primero el Flujo clínico CTA y revise el candidato.",
+                "WARNING")
+            return
+        respuesta = QMessageBox.question(
+            self, "Aprobación humana requerida",
+            "Confirma que revisó los cortes, la máscara vascular y la geometría "
+            "DICOM. ¿Desea generar el DICOM SEG?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if respuesta != QMessageBox.Yes:
+            self.consola.log("Exportación SEG cancelada por el usuario", "INFO")
+            return
+        self._worker_cancelado = False
+        self.barra_progreso.reset("Exportando SEG")
+        self.card_estado.set_value("Exportando SEG", COLOR_ACENTO)
+        self.panel_estudio.set_procesando(True, hay_mallas=True)
+        self._lanzar_worker(ClinicalCTAWorker(
+            ruta, salida, approved_by="usuario-local"))
 
     def exportar_fbx(self):
         """Convierte las mallas visibles en archivos FBX, en segundo plano."""
@@ -621,7 +761,13 @@ class MainWindow(QMainWindow):
         # Se exportan las estructuras VISIBLES, que es lo que el usuario tiene
         # en pantalla. Si no hay ninguna marcada, se exportan todas.
         visibles = self.panel_capas.claves_visibles()
-        self._lanzar_worker(FbxExportWorker(estructuras=sorted(visibles) or None))
+        serie = self.modelo.serie_activa
+        rutas = mesh_store.rutas_serie(
+            serie.ruta if serie is not None and os.path.isdir(serie.ruta)
+            else None)
+        self._lanzar_worker(FbxExportWorker(
+            stl_dir=rutas["mallas"], fbx_dir=rutas["fbx"],
+            estructuras=sorted(visibles) or None))
 
     def cancelar(self):
         """Pide al worker en curso que se detenga en el siguiente punto."""
@@ -634,19 +780,22 @@ class MainWindow(QMainWindow):
 
     def refrescar_resultados(self):
         """Reescanea mallas y cortes tras terminar el pipeline."""
-        modelos = mesh_store.escanear_mallas()
-        cortes = mesh_store.listar_cortes()
-        self.consola.log(
-            f"Resultados: {len(modelos)} mallas, {len(cortes)} cortes", "SUCCESS")
-
         serie = self.modelo.serie_activa
         if serie is None:
             return
+        rutas = mesh_store.rutas_serie(
+            serie.ruta if os.path.isdir(serie.ruta) else None)
+        modelos = mesh_store.escanear_mallas(dirs=[rutas["mallas"]],
+                                                fbx_dir=rutas["fbx"])
+        cortes = mesh_store.listar_cortes(rutas["slices"])
+        self.consola.log(
+            f"Resultados: {len(modelos)} mallas, {len(cortes)} cortes", "SUCCESS")
+
         # Se conservan las visibilidades que el usuario ya habia elegido.
         visibles = set(serie.claves_visibles())
+        serie.capas.clear()
         for key, meta in modelos.items():
-            if key not in serie.capas:
-                serie.add_capa(key, meta["label"], meta["display"], meta["stl"])
+            serie.add_capa(key, meta["label"], meta["display"], meta["stl"])
         self.modelo.slices_2d = cortes
 
         self.visor_2d.set_cortes(cortes)
@@ -668,7 +817,7 @@ class MainWindow(QMainWindow):
             "PNG (*.png)")
         if not ruta:
             return
-        ok = self.visor_3d.guardar_imagen(ruta)
+        ok = self.visor_3d.guardar_imagen(ruta, escala=2)
         self.consola.log(
             f"Imagen 3D guardada en {ruta}" if ok
             else "No se pudo guardar la imagen",

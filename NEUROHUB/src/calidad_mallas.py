@@ -106,8 +106,13 @@ ESPACIADO_MINIMO_MM = 0.35
 # anatomía. Tabla completa en work/valida_sigma.out.
 PERFIL_CALIDAD = {
     "cerebro": {"sigma_mm": 2.5, "taubin_iter": 45},
-    "craneo":  {"sigma_mm": 2.0, "taubin_iter": 45},
+    # La calota es una envoltura fina: un suavizado alto puede abrirla en
+    # zonas estrechas aunque la máscara binaria sea un único componente.
+    "craneo":  {"sigma_mm": 0.5, "taubin_iter": 25},
     "tumor":   {"sigma_mm": 1.0, "taubin_iter": 30},
+    "vasos":   {"sigma_mm": 0.35, "taubin_iter": 12},
+    "arterias": {"sigma_mm": 0.30, "taubin_iter": 10},
+    "venas":   {"sigma_mm": 0.30, "taubin_iter": 10},
 }
 
 # Cualquier otra estructura (vasos, nervios, ROI sueltas) recibe un sigma
@@ -319,6 +324,22 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
         campo = zoom_lineal(datos.astype(np.float32), factores) if refinado \
             else datos.astype(np.float32)
 
+    if not np.all(np.isfinite(campo)):
+        raise ValueError(
+            f"El campo de la máscara {estructura or 'malla'} contiene valores "
+            "no finitos después del remuestreo."
+        )
+
+    # Una delineación muy pequeña puede ocupar todo el recorte tras el zoom,
+    # dejando min(campo) > 0.5. En ese caso el nivel de la superficie no existe
+    # porque falta el fondo exterior, aunque la máscara sí tenga voxels.
+    # Añadir un voxel de fondo conserva la geometría y permite cerrar la
+    # superficie sin inventar anatomía.
+    borde_exterior = False
+    if float(np.min(campo)) >= 0.5 or float(np.max(campo)) <= 0.5:
+        campo = np.pad(campo, 1, mode="constant", constant_values=0.0)
+        borde_exterior = True
+
     # El volumen se mide sobre el campo ya suavizado, que es lo que define la
     # superficie. Medirlo aquí, y no sobre `verts`/`faces`, evita depender de
     # una malla que no es cerrada (ver `volumen_del_campo_mm3`).
@@ -334,6 +355,8 @@ def malla_alta_calidad(mask, spacing, estructura="", min_voxels=0,
         recorte[1].start * sy,
         recorte[2].start * sx,
     ])
+    if borde_exterior:
+        origen_mm -= objetivo
     verts = verts + origen_mm
 
     if len(verts) == 0 or len(faces) == 0:
