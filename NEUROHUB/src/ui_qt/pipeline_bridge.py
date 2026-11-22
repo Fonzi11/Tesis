@@ -1,5 +1,5 @@
 """
-Puente entre la interfaz PySide6 y el pipeline de NEUROHUB.
+Puente entre la interfaz PySide6 y el pipeline de ATLAS.
 
 Este modulo es el UNICO punto de contacto entre la capa de presentacion
 (nuevos widgets) y la capa de procesamiento (modulos 01..04,
@@ -553,7 +553,7 @@ class ClinicalCTAWorker(QObject):
             from ..clinical_pipeline import run_cta_pipeline
             report = run_cta_pipeline(
                 self.input_path, self.output_dir, approved_by=self.approved_by,
-                approval_notes="Aprobación humana registrada desde NEUROHUB.",
+                approval_notes="Aprobación humana registrada desde ATLAS.",
             )
             self.progress.emit(1.0)
             self.log.emit(
@@ -626,7 +626,8 @@ class FreeSurferWorker(QObject):
                 entrada, self.subject, self.subjects_dir,
                 os.path.join(self.output_dir,
                              "freesurfer_aseg.nii.gz"),
-                license_path=self.license_path, log_path=log_path)
+                license_path=self.license_path, log_path=log_path,
+                output_callback=self._emit_external_log)
             import segmentacion_completa as sc
             run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             mallas_dir = os.path.join(
@@ -657,6 +658,10 @@ class FreeSurferWorker(QObject):
             self.log.emit(f"FreeSurfer falló: {exc}", "ERROR")
             self.log.emit(traceback.format_exc(), "ERROR")
             self.finished.emit(False, str(exc))
+
+    def _emit_external_log(self, mensaje):
+        """Retransmite la salida de FreeSurfer a la consola de la interfaz."""
+        self.log.emit(mensaje, "INFO")
 
     def _normalizar_3d(self, entrada):
         """Aísla un primer volumen cuando el NIfTI trae ejes singleton."""

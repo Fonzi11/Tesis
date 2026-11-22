@@ -1,0 +1,16 @@
+{
+  "studies": [
+    "tumor_02",
+    "aneurisma_05",
+    "brats_00000",
+    "brats_00003",
+    "brats_00006"
+  ],
+  "lightStudies": [
+    "tumor_02_ligero",
+    "aneurisma_05_ligero",
+    "brats_00000_ligero",
+    "brats_00003_ligero",
+    "brats_00006_ligero"
+  ]
+}

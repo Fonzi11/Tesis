@@ -55,3 +55,42 @@ def test_zip_corrupto_se_omite_y_no_permite_traversal(tmp_path):
     assert extracted is None
     assert count == 0
     assert not (tmp_path / "escape.dcm").exists()
+
+
+def test_conversion_por_lotes_convierte_todas_las_series(tmp_path, monkeypatch):
+    root = tmp_path / "estudio"
+    (root / "serie_a").mkdir(parents=True)
+    (root / "serie_b").mkdir()
+
+    class FakeImage:
+        pass
+
+    class FakeReader:
+        def __init__(self):
+            self.names = None
+
+        def GetGDCMSeriesIDs(self, directory):
+            return {"serie_a": ["a"], "serie_b": ["b"]}.get(
+                os.path.basename(directory), [])
+
+        def GetGDCMSeriesFileNames(self, directory, series_id):
+            return [os.path.join(directory, series_id + ".dcm")]
+
+        def SetFileNames(self, names):
+            self.names = names
+
+        def Execute(self):
+            return FakeImage()
+
+    escritos = []
+    monkeypatch.setattr(dicom.sitk, "ImageSeriesReader", FakeReader)
+    monkeypatch.setattr(
+        dicom.sitk, "WriteImage",
+        lambda image, path: escritos.append(path))
+
+    resultados = dicom.dicom_series_to_nifti(
+        str(root), str(tmp_path / "nifti"))
+
+    assert len(resultados) == 2
+    assert all(path.endswith(".nii.gz") for path in resultados)
+    assert escritos == resultados

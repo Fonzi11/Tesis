@@ -1,5 +1,5 @@
 """
-Paridad numerica entre el motor NEUROHUB y PyRadiomics 3.0.1.
+Paridad numerica entre el motor ATLAS y PyRadiomics 3.0.1.
 
 PyRadiomics es la implementacion de referencia IBSI de facto: si un descriptor
 no coincide con el, el descriptor es el que esta mal. Este guion corre AMBOS
@@ -17,7 +17,7 @@ configuracion en los dos lados:
 Detalle importante: PyRadiomics se llama igual que el motor propio
 (`radiomics` en los dos casos), asi que no se puede importar por nombre. El
 paquete de referencia se carga por ruta con importlib, Leaving `radiomics` en
-sys.modules apuntando al codigo de NEUROHUB.
+sys.modules apuntando al codigo de ATLAS.
 """
 
 import importlib.util
@@ -35,7 +35,7 @@ SRC_NEUROHUB = os.path.join(
 
 # PyRadiomics hace imports ABSOLUTOS internos (`from radiomics import
 # _cmatrices`), asi que el nombre `radiomics` le tiene que pertenecer a el. Por
-# eso PyRadiomics se importa de forma normal y NEUROHUB, que solo usa imports
+# eso PyRadiomics se importa de forma normal y ATLAS, que solo usa imports
 # relativos, se carga por ruta bajo otro nombre.
 sys.path.insert(0, RAIZ_PYRADIOMICS)
 import radiomics as pyradiomics            # noqa: E402  referencia
@@ -148,8 +148,8 @@ def main():
     print("  PyRadiomics devolvio %d descriptores numericos (%d vectoriales)"
           % (len(numericos_py), len(vectoriales)))
 
-    # ---------------- NEUROHUB (motor bajo prueba) ---------------------
-    print("Ejecutando NEUROHUB %s..." % neurohub.__version__, flush=True)
+    # ---------------- ATLAS (motor bajo prueba) ---------------------
+    print("Ejecutando ATLAS %s..." % neurohub.__version__, flush=True)
     vol, spacing, meta = neurohub.cargar_volumen(MRI)
     roi = neurohub.MaskLabelMap.from_nifti(TUMOR, (1, 2, 3), "Tumor") \
         if hasattr(neurohub.MaskLabelMap, "from_nifti") else None
@@ -160,7 +160,7 @@ def main():
         bin_count=BIN_COUNT, normalize=False,
         resegmentacion=False, calcular_textura=True)
     propio = neurohub.extraer_radiomics(vol, {"Tumor": roi}, cfg)["Tumor"]
-    print("  NEUROHUB devolvio %d descriptores" % len(propio))
+    print("  ATLAS devolvio %d descriptores" % len(propio))
 
     # ---------------- COMPARACION -------------------------------------
     #
@@ -201,7 +201,7 @@ def main():
 
     print()
     print("=" * 72)
-    print("COMPARACION NEUROHUB  vs  PyRadiomics 3.0.1")
+    print("COMPARACION ATLAS  vs  PyRadiomics 3.0.1")
     print("=" * 72)
     print("ROI                     : tumor (etiqueta %d) sobre %s"
           % (ETIQUETA, os.path.basename(MRI)))
@@ -210,7 +210,7 @@ def main():
           % (TOLERANCIA, coinciden, 100.0 * coinciden / max(comunes, 1)))
     print("Desviaciones            : %d" % len(desviaciones))
     print("Solo en PyRadiomics     : %d" % len(faltan_nh))
-    print("Solo en NEUROHUB       : %d" % len(faltan_py))
+    print("Solo en ATLAS       : %d" % len(faltan_py))
     print()
 
     if desviaciones:
@@ -220,12 +220,12 @@ def main():
             print("  %-50s py=%-13.6g nh=%-13.6g rel=%s" % (nhname, a, b, err))
         print()
     if faltan_nh:
-        print("--- Presentes en PyRadiomics, ausentes en NEUROHUB ---")
+        print("--- Presentes en PyRadiomics, ausentes en ATLAS ---")
         for pyname, nhname in faltan_nh[:40]:
             print("  %-46s -> %s" % (pyname, nhname))
         print()
     if faltan_py:
-        print("--- Presentes en NEUROHUB, ausentes en PyRadiomics ---")
+        print("--- Presentes en ATLAS, ausentes en PyRadiomics ---")
         for nhname in faltan_py[:40]:
             print("  %s" % nhname)
         print()

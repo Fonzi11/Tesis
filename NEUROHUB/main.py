@@ -1,6 +1,6 @@
 """
 =====================================================================
- NEUROHUB - Interfaz Profesional Dark
+ ATLAS - Interfaz Profesional Dark
  Segmentación y Modelado 3D de Neuroimágenes
 =====================================================================
 """
@@ -32,7 +32,7 @@ ctk.set_default_color_theme("blue")
 # =====================================================================
 # CONSTANTES
 # =====================================================================
-APP_NAME = "NEUROHUB"
+APP_NAME = "ATLAS"
 APP_VERSION = "1.0.0"
 APP_SUBTITLE = "Segmentación y Modelado 3D de Neuroimágenes"
 
@@ -478,7 +478,7 @@ class Viewer3DWindow(ctk.CTkToplevel):
 
     def __init__(self, master, fbx_dir, stl_dir, status_callback=None, **kwargs):
         super().__init__(master, **kwargs)
-        self.title("NEUROHUB - VISOR 3D")
+        self.title("ATLAS - VISOR 3D")
         self.configure(fg_color=COLORS["bg"])
 
         self.preview_3d = FBXPreviewPanel(self, fbx_dir, stl_dir,
@@ -509,7 +509,7 @@ class Viewer2DWindow(ctk.CTkToplevel):
 
     def __init__(self, master, slice_dir, status_callback=None, **kwargs):
         super().__init__(master, **kwargs)
-        self.title("NEUROHUB - VISTAS 2D")
+        self.title("ATLAS - VISTAS 2D")
         self.configure(fg_color=COLORS["bg"])
 
         self.slices_2d = Slice2DPanel(self, slice_dir)
@@ -1595,7 +1595,7 @@ class StatusCard(ctk.CTkFrame):
 # CLASE: Aplicación Principal
 # =====================================================================
 class AtlasApp(ctk.CTk):
-    """Aplicación principal de NEUROHUB."""
+    """Aplicación principal de ATLAS."""
 
     def __init__(self):
         super().__init__()

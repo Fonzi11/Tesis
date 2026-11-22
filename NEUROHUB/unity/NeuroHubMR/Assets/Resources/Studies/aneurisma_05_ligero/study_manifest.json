@@ -1,0 +1,468 @@
+{
+  "schema": "neurohub-mr-study-v1",
+  "studyId": "aneurisma_05_ligero",
+  "caseId": "aneurisma_05",
+  "lesionType": "aneurisma",
+  "lod": "ligero",
+  "sourceDirectory": "D:\\Tesis\\salidas\\modelos_ar_freesurfer\\aneurisma_05",
+  "generatedAtUtc": "2026-11-22T14:16:55.863396+00:00",
+  "models": [
+    {
+      "id": "corteza_frontal_izq",
+      "file": "corteza_frontal_izq.fbx",
+      "name": "Corteza frontal izquierda",
+      "group": "corteza",
+      "color": [
+        0.36,
+        0.62,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 70.23,
+      "triangles": 43890
+    },
+    {
+      "id": "corteza_motora_izq",
+      "file": "corteza_motora_izq.fbx",
+      "name": "Corteza motora izquierda",
+      "group": "corteza",
+      "color": [
+        0.98,
+        0.8,
+        0.2,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 12.74,
+      "triangles": 12038
+    },
+    {
+      "id": "corteza_parietal_izq",
+      "file": "corteza_parietal_izq.fbx",
+      "name": "Corteza parietal izquierda",
+      "group": "corteza",
+      "color": [
+        0.4,
+        0.85,
+        0.55,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 60.45,
+      "triangles": 38594
+    },
+    {
+      "id": "corteza_temporal_izq",
+      "file": "corteza_temporal_izq.fbx",
+      "name": "Corteza temporal izquierda",
+      "group": "corteza",
+      "color": [
+        0.98,
+        0.58,
+        0.3,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 59.29,
+      "triangles": 36718
+    },
+    {
+      "id": "corteza_occipital_izq",
+      "file": "corteza_occipital_izq.fbx",
+      "name": "Corteza occipital izquierda",
+      "group": "corteza",
+      "color": [
+        0.72,
+        0.52,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 19.12,
+      "triangles": 16450
+    },
+    {
+      "id": "corteza_cingulado_izq",
+      "file": "corteza_cingulado_izq.fbx",
+      "name": "Corteza cingulado izquierda",
+      "group": "corteza",
+      "color": [
+        0.95,
+        0.45,
+        0.7,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 11.17,
+      "triangles": 10778
+    },
+    {
+      "id": "corteza_insula_izq",
+      "file": "corteza_insula_izq.fbx",
+      "name": "Corteza insula izquierda",
+      "group": "corteza",
+      "color": [
+        0.35,
+        0.85,
+        0.85,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 5.66,
+      "triangles": 4866
+    },
+    {
+      "id": "corteza_frontal_der",
+      "file": "corteza_frontal_der.fbx",
+      "name": "Corteza frontal derecha",
+      "group": "corteza",
+      "color": [
+        0.36,
+        0.62,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 73.04,
+      "triangles": 45628
+    },
+    {
+      "id": "corteza_motora_der",
+      "file": "corteza_motora_der.fbx",
+      "name": "Corteza motora derecha",
+      "group": "corteza",
+      "color": [
+        0.98,
+        0.8,
+        0.2,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 14.48,
+      "triangles": 11790
+    },
+    {
+      "id": "corteza_parietal_der",
+      "file": "corteza_parietal_der.fbx",
+      "name": "Corteza parietal derecha",
+      "group": "corteza",
+      "color": [
+        0.4,
+        0.85,
+        0.55,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 64.03,
+      "triangles": 37164
+    },
+    {
+      "id": "corteza_temporal_der",
+      "file": "corteza_temporal_der.fbx",
+      "name": "Corteza temporal derecha",
+      "group": "corteza",
+      "color": [
+        0.98,
+        0.58,
+        0.3,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 53.93,
+      "triangles": 32153
+    },
+    {
+      "id": "corteza_occipital_der",
+      "file": "corteza_occipital_der.fbx",
+      "name": "Corteza occipital derecha",
+      "group": "corteza",
+      "color": [
+        0.72,
+        0.52,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 23.14,
+      "triangles": 19210
+    },
+    {
+      "id": "corteza_cingulado_der",
+      "file": "corteza_cingulado_der.fbx",
+      "name": "Corteza cingulado derecha",
+      "group": "corteza",
+      "color": [
+        0.95,
+        0.45,
+        0.7,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 9.54,
+      "triangles": 9955
+    },
+    {
+      "id": "corteza_insula_der",
+      "file": "corteza_insula_der.fbx",
+      "name": "Corteza insula derecha",
+      "group": "corteza",
+      "color": [
+        0.35,
+        0.85,
+        0.85,
+        1.0
+      ],
+      "opacity": 0.16,
+      "volumeCm3": 7.78,
+      "triangles": 6800
+    },
+    {
+      "id": "sustancia_blanca_izq",
+      "file": "sustancia_blanca_izq.fbx",
+      "name": "Sustancia blanca izquierda",
+      "group": "sustancia_blanca",
+      "color": [
+        0.92,
+        0.92,
+        0.88,
+        1.0
+      ],
+      "opacity": 0.06,
+      "volumeCm3": 169.97,
+      "triangles": 46498
+    },
+    {
+      "id": "sustancia_blanca_der",
+      "file": "sustancia_blanca_der.fbx",
+      "name": "Sustancia blanca derecha",
+      "group": "sustancia_blanca",
+      "color": [
+        0.92,
+        0.92,
+        0.88,
+        1.0
+      ],
+      "opacity": 0.06,
+      "volumeCm3": 174.74,
+      "triangles": 47420
+    },
+    {
+      "id": "ventriculos",
+      "file": "ventriculos.fbx",
+      "name": "Sistema ventricular",
+      "group": "ventriculos",
+      "color": [
+        0.25,
+        0.55,
+        1.0,
+        1.0
+      ],
+      "opacity": 0.55,
+      "volumeCm3": 18.13,
+      "triangles": 14309
+    },
+    {
+      "id": "talamo",
+      "file": "talamo.fbx",
+      "name": "Tálamos",
+      "group": "profundas",
+      "color": [
+        0.2,
+        0.8,
+        0.3,
+        1.0
+      ],
+      "opacity": 0.8,
+      "volumeCm3": 14.4,
+      "triangles": 9902
+    },
+    {
+      "id": "caudado",
+      "file": "caudado.fbx",
+      "name": "Núcleos caudados",
+      "group": "profundas",
+      "color": [
+        0.55,
+        0.85,
+        1.0,
+        1.0
+      ],
+      "opacity": 0.8,
+      "volumeCm3": 7.48,
+      "triangles": 9078
+    },
+    {
+      "id": "putamen",
+      "file": "putamen.fbx",
+      "name": "Putámenes",
+      "group": "profundas",
+      "color": [
+        0.95,
+        0.55,
+        0.75,
+        1.0
+      ],
+      "opacity": 0.8,
+      "volumeCm3": 10.2,
+      "triangles": 10100
+    },
+    {
+      "id": "globo_palido",
+      "file": "globo_palido.fbx",
+      "name": "Globos pálidos",
+      "group": "profundas",
+      "color": [
+        0.3,
+        0.4,
+        0.95,
+        1.0
+      ],
+      "opacity": 0.8,
+      "volumeCm3": 2.69,
+      "triangles": 3396
+    },
+    {
+      "id": "hipocampo",
+      "file": "hipocampo.fbx",
+      "name": "Hipocampos",
+      "group": "profundas",
+      "color": [
+        1.0,
+        0.85,
+        0.3,
+        1.0
+      ],
+      "opacity": 0.85,
+      "volumeCm3": 7.15,
+      "triangles": 9064
+    },
+    {
+      "id": "amigdala",
+      "file": "amigdala.fbx",
+      "name": "Amígdalas",
+      "group": "profundas",
+      "color": [
+        0.4,
+        0.95,
+        0.9,
+        1.0
+      ],
+      "opacity": 0.85,
+      "volumeCm3": 3.03,
+      "triangles": 3744
+    },
+    {
+      "id": "accumbens",
+      "file": "accumbens.fbx",
+      "name": "Núcleos accumbens",
+      "group": "profundas",
+      "color": [
+        1.0,
+        0.65,
+        0.2,
+        1.0
+      ],
+      "opacity": 0.85,
+      "volumeCm3": 1.25,
+      "triangles": 3000
+    },
+    {
+      "id": "diencefalo_ventral",
+      "file": "diencefalo_ventral.fbx",
+      "name": "Diencéfalo ventral",
+      "group": "profundas",
+      "color": [
+        0.65,
+        0.4,
+        0.25,
+        1.0
+      ],
+      "opacity": 0.7,
+      "volumeCm3": 8.79,
+      "triangles": 5810
+    },
+    {
+      "id": "tronco_encefalico",
+      "file": "tronco_encefalico.fbx",
+      "name": "Tronco encefálico",
+      "group": "cerebelo_tronco",
+      "color": [
+        0.55,
+        0.75,
+        0.35,
+        1.0
+      ],
+      "opacity": 0.55,
+      "volumeCm3": 21.0,
+      "triangles": 8654
+    },
+    {
+      "id": "cerebelo",
+      "file": "cerebelo.fbx",
+      "name": "Cerebelo",
+      "group": "cerebelo_tronco",
+      "color": [
+        0.92,
+        0.75,
+        0.45,
+        1.0
+      ],
+      "opacity": 0.35,
+      "volumeCm3": 119.51,
+      "triangles": 21171
+    },
+    {
+      "id": "craneo",
+      "file": "craneo.fbx",
+      "name": "Cráneo",
+      "group": "craneo",
+      "color": [
+        0.93,
+        0.9,
+        0.82,
+        1.0
+      ],
+      "opacity": 0.18,
+      "volumeCm3": 509.74,
+      "triangles": 169415
+    },
+    {
+      "id": "arterias",
+      "file": "arterias.fbx",
+      "name": "Arterias intracraneales",
+      "group": "vasos",
+      "color": [
+        0.86,
+        0.1,
+        0.12,
+        1.0
+      ],
+      "opacity": 0.9,
+      "volumeCm3": 2.13,
+      "triangles": 11546
+    },
+    {
+      "id": "aneurisma",
+      "file": "aneurisma.fbx",
+      "name": "Aneurisma sacular",
+      "group": "lesion",
+      "color": [
+        1.0,
+        0.85,
+        0.1,
+        1.0
+      ],
+      "opacity": 0.95,
+      "volumeCm3": 0.18,
+      "triangles": 3000
+    }
+  ],
+  "clinicalReviewRequired": true,
+  "renderProfile": {
+    "pipeline": "URP",
+    "antiAliasing": 4,
+    "gpuInstancing": true,
+    "asyncLoad": true
+  }
+}

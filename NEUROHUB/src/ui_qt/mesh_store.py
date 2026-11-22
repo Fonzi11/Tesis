@@ -22,7 +22,7 @@ import os
 
 import numpy as np
 
-# src/ui_qt/mesh_store.py -> src/ui_qt -> src -> NEUROHUB -> <raiz>
+# src/ui_qt/mesh_store.py -> src/ui_qt -> src -> ATLAS -> <raiz>
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 RAIZ_DIR = os.path.dirname(BASE_DIR)

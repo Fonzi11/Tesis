@@ -1,5 +1,5 @@
 """
-Motor de radiomics nativo de NEUROHUB (implementacion IBSI en NumPy/SciPy).
+Motor de radiomics nativo de ATLAS (implementacion IBSI en NumPy/SciPy).
 
 Por que NO PyRadiomics
 ---------------------

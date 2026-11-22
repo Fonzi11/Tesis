@@ -1,5 +1,5 @@
 """
-NEUROHUB - Interfaz grafica PySide6 (capa de presentacion).
+ATLAS - Interfaz grafica PySide6 (capa de presentacion).
 
 Este paquete implementa la ventana principal, los paneles de capas, el
 visor central 2D/3D y la consola de progreso siguiendo el flujo de trabajo de

@@ -1,6 +1,6 @@
 """
 =====================================================================
- NEUROHUB - Script de Build para Ejecutable
+ ATLAS - Script de Build para Ejecutable
 =====================================================================
 """
 
@@ -11,7 +11,7 @@ import subprocess
 def main():
     """Genera el ejecutable único."""
     print("=" * 60)
-    print("  NEUROHUB - Generando Ejecutable")
+    print("  ATLAS - Generando Ejecutable")
     print("=" * 60)
 
     # Verificar que PyInstaller esté instalado
@@ -34,7 +34,7 @@ def main():
         "--clean",
         "--onefile",
         "--windowed",
-        "--name", "NEUROHUB",
+        "--name", "ATLAS",
         "--icon", os.path.join(base_dir, "assets", "icon.ico") if os.path.exists(os.path.join(base_dir, "assets", "icon.ico")) else None,
         "--add-data", f"{os.path.join(base_dir, 'src')};src",
         "--hidden-import", "customtkinter",
@@ -61,7 +61,7 @@ def main():
     result = subprocess.run(cmd, cwd=base_dir)
 
     if result.returncode == 0:
-        exe_path = os.path.join(base_dir, "dist", "NEUROHUB.exe")
+        exe_path = os.path.join(base_dir, "dist", "ATLAS.exe")
         print(f"\n{'=' * 60}")
         print(f"✓ Ejecutable generado: {exe_path}")
         print(f"{'=' * 60}")

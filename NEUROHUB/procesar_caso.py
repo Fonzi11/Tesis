@@ -1,5 +1,5 @@
 """
-NEUROHUB - Procesado completo de un caso desde un NIfTI
+ATLAS - Procesado completo de un caso desde un NIfTI
 ======================================================
 Ejecuta de principio a fin la reconstruccion 3D de un volumen clinico y genera
 los renders PNG, sin depender de la interfaz grafica.
@@ -130,7 +130,7 @@ def construir_mallas(mascaras, mallas_dir):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Procesado completo de un caso NIfTI en NEUROHUB")
+        description="Procesado completo de un caso NIfTI en ATLAS")
     ap.add_argument("nifti", help="ruta del volumen NIfTI de entrada")
     ap.add_argument("--salida", default=None,
                     help="carpeta de trabajo (por defecto, una bajo salidas/)")
@@ -157,7 +157,7 @@ def main():
     renders_dir = os.path.join(trabajo, "renders")
 
     print("=" * 70)
-    print(f"NEUROHUB - Procesado de {nombre}")
+    print(f"ATLAS - Procesado de {nombre}")
     print("=" * 70)
     inicio = time.time()
 

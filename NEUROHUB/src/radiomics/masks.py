@@ -13,7 +13,7 @@ sobre los compartimentos que define el sistema Raids-RADS:
 Aqui se reproducen esas definiciones junto con las estructuras anatomicas de
 interes para neuroimagen (cerebro, craneo, cerebelo, tronco, ventriculos,
 hipocampo...), y las funciones que las construyen a partir de los NIfTI que
-produce el pipeline de NEUROHUB.
+produce el pipeline de ATLAS.
 
 Los nombres de archivo son los que escribe `segmentacion_completa` y
 `03_integrar_brats`, de modo que estas ROI se resuelven sin conversiones.
@@ -253,7 +253,7 @@ def rois_raidionics(tumor_roi, solo_no_vacias=True):
 
     Raidionics define su propio esquema de etiquetas (Brain, Skull,
     LateralVentricle, Hippocampus...). Se aceptan las claves internas de
-    NEUROHUB y las de TotalSegmentator, de modo que la misma funcion sirva
+    ATLAS y las de TotalSegmentator, de modo que la misma funcion sirva
     para un `brain.nii.gz` de TotalSegmentator o para una mascara fusionada
     por el pipeline.
     """

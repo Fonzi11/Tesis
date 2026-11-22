@@ -13,7 +13,7 @@ import os
 class Serie:
     """Una serie/estudio cargado en la sesion.
 
-    En NEUROHUB cada "timestamp" de la interfaz equivale a un volumen de
+    En ATLAS cada "timestamp" de la interfaz equivale a un volumen de
     entrada (NIfTI o directorio DICOM). Se guardan los datos descriptivos que
     la interfaz muestra en la cabecera.
     """

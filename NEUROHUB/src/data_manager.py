@@ -1,5 +1,5 @@
 """
-NEUROHUB - Módulo de Datos y Repositorios
+ATLAS - Módulo de Datos y Repositorios
 =========================================
 Gestión de datasets públicos (BraTS, TCIA, ADAM) y descarga.
 """
@@ -337,7 +337,7 @@ def exportar_whole_brain_stl(nifti_path, salida_dir=None):
 
 
 if __name__ == "__main__":
-    print("NEUROHUB - Módulo de Datos")
+    print("ATLAS - Módulo de Datos")
     print("=" * 50)
     print("\nDatasets disponibles:")
     for ds in DATASETS:

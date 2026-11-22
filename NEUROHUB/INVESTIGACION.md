@@ -1,4 +1,4 @@
-# 📚 Investigación de Recursos para NEUROHUB
+# 📚 Investigación de Recursos para ATLAS
 
 ## Datasets Públicos para Identificación de Tumores Cerebrales
 
@@ -11,7 +11,7 @@
   - Label 4: **ET** (Tumor realzado con gadolinio)
 - **Acceso**: Registración en CBICA UPenn. Muestra libre en HuggingFace
   `rocky93/BraTS_segmentation`
-- **Uso en NEUROHUB**: ya descargadas 12 muestras en `data/nifti/braTS_sample/`
+- **Uso en ATLAS**: ya descargadas 12 muestras en `data/nifti/braTS_sample/`
 
 ### TCIA (The Cancer Imaging Archive)
 - **Formato**: DICOM
@@ -52,7 +52,7 @@
 | 3D Slicer (open source) | NIfTI, DICOM, STL, PLY |
 
 ### Flujo de trabajo recomendado
-1. Cargar NIfTI/DICOM en NEUROHUB
+1. Cargar NIfTI/DICOM en ATLAS
 2. Segmentar tumor/aneurisma (BRATS o heurística)
 3. Exportar STL (funciones `exportar_para_neuronavegacion`)
 4. Importar en 3D Slicer → fusionar con volumen → exportar al sistema de neuronavegación
@@ -61,7 +61,7 @@
 - Protocolo abierto para comunicación en tiempo real en quirófano
 - Compatible con 3D Slicer, robots quirúrgicos y sistemas de tracking
 
-## Pipeline de Segmentación Implementado en NEUROHUB
+## Pipeline de Segmentación Implementado en ATLAS
 
 ```
 Input (DICOM/NIfTI)
@@ -87,7 +87,7 @@ Input (DICOM/NIfTI)
 - **BraTS 2020**: El modelo MONAI `brats_mri_segmentation` (v0.4.4) pesa
   ~33MB y se descarga automáticamente de MONAI Model Zoo (en `NEUROHUB/`)
 - **TotalSegmentator**: Segmenta >100 estructuras anatómicas, incluyendo
-  cerebro, cráneo, vasos (en NEUROHUB)
+  cerebro, cráneo, vasos (en ATLAS)
 - **Los archivos de ejemplo**: 12 pacientes BraTS2021 con 4 modalidades
   cada uno están en `data/nifti/braTS_sample/`
 

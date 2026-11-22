@@ -4,6 +4,10 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/NeuroHubMR.unity
+    guid: 7a292d9de1cbafc45bddae289d6e7099
   m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: e81bec5f60b408f46bba99cd2b2d9c9c, type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 6dc411576b6a3b24882d5f00e36f97a9, type: 2}

@@ -1,5 +1,5 @@
 """
-NEUROHUB - Generador de Preview 3D (headless)
+ATLAS - Generador de Preview 3D (headless)
 ============================================
 Renderiza las mallas STL (cerebro, cráneo, tumor, arterias, venas, vasos)
 a una imagen PNG de vista previa usando matplotlib con shading por normales.
@@ -208,7 +208,7 @@ def main():
     ax.axis("off")
 
     # Título
-    ax.set_title("NEUROHUB — Segmentación Completa\n"
+    ax.set_title("ATLAS — Segmentación Completa\n"
                  "Cerebro · Cráneo · Arterias · Venas · Vasos · Tumor",
                  fontsize=13, color="#c8c8d0", pad=8)
 

@@ -46,6 +46,9 @@ NEUROHUB/unity/**/UserSettings/
 NEUROHUB/unity/**/.vs/
 NEUROHUB/unity/**/*.csproj
 NEUROHUB/unity/**/*.sln
+NEUROHUB/unity/**/Builds/
+NEUROHUB/unity/**/EstudiosArchivados/
+NEUROHUB/unity/**/SimulationResults/*.log
 
 # Licencias locales de motores externos; configurar fuera del repositorio.
 license.txt
@@ -65,3 +68,5 @@ Thumbs.db
 .agents/
 .claude/
 skills-lock.json
+# Capturas de simulación: renders de modelos de pacientes (repositorio público)
+NEUROHUB/unity/**/SimulationResults/capturas/

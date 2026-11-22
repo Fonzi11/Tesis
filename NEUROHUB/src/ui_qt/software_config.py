@@ -1,40 +1,66 @@
 """
-Paleta de colores, tipografias y hoja de estilos global de NEUROHUB.
+Identidad visual de ATLAS: marca, paleta, tipografías y hoja de estilos global.
 
-Sustituye al diccionario COLORS de la interfaz Tk y al bloque de estilos de
-`main.py`. Se mantiene separado para que cambiar el tema no toque la logica.
+ATLAS (Augmented Technologies Laboratory for Advanced Surgery) es el
+laboratorio de neurocirugía del Hospital Universitario San Ignacio; esta
+aplicación es su plataforma de preparación y revisión de modelos 3D.
 
-Los colores se guardan como cadenas "#RRGGBB" porque es lo que espera
+La paleta es oscura y de bajo contraste en las superficies (las imágenes
+médicas se leen mejor sobre fondos neutros) con un único acento turquesa para
+lo interactivo. Los colores se guardan como "#RRGGBB" porque es lo que espera
 QSS; cuando hace falta un QColor se usa `qt_color()`.
 """
+
+import os
 
 from PySide6.QtGui import QColor, QFont
 
 # =============================================================================
+# MARCA
+# =============================================================================
+APP_NOMBRE = "ATLAS"
+APP_LEMA = "Augmented Technologies Laboratory for Advanced Surgery"
+APP_INSTITUCION = "Hospital Universitario San Ignacio · Pontificia Universidad Javeriana"
+APP_DESCRIPCION = "Modelos 3D neuroquirúrgicos para realidad mixta"
+APP_TITULO_VENTANA = f"{APP_NOMBRE} — {APP_DESCRIPCION}"
+
+_ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "assets")
+FUENTE_MARCA_ARCHIVO = os.path.join(_ASSETS, "fonts", "Montserrat-Bold.ttf")
+
+
+def _icono(nombre):
+    """Ruta de un icono de interfaz con barras normales (lo que exige QSS)."""
+    return os.path.join(_ASSETS, "ui", nombre).replace("\\", "/")
+
+
+# =============================================================================
 # PALETA
 # =============================================================================
-# Color2..Color7 replican los roles de Raidionics (fondo, widget, presion,
-# hover, borde, texto) para que la interfaz se lea igual.
-COLOR_BG = "#10141c"          # fondo de la aplicacion
-COLOR_PANEL = "#171e29"       # fondo de paneles
-COLOR_PANEL_ALT = "#202b3a"   # alternativa / tarjetas
-COLOR_SELECCION = "#263b52"   # item seleccionado
-COLOR_HOVER = "#2d4964"       # hover fuerte
-COLOR_BORDE = "#33485d"       # separadores
-COLOR_TEXTO = "#e5edf5"       # texto principal
-COLOR_TEXTO_SEC = "#91a4b7"
-COLOR_ACENTO = "#41d7e8"      # cian clínico
-COLOR_OK = "#48e39a"
-COLOR_WARN = "#ffbe5c"
-COLOR_ERROR = "#ff5c5c"
-COLOR_VOZ = "#b06ad4"         # violeta: convencion radiologica para voz
+COLOR_BG = "#0B0F14"           # fondo de la aplicación
+COLOR_PANEL = "#11171F"        # paneles laterales y barras
+COLOR_PANEL_ALT = "#18202A"    # tarjetas, botones, campos
+COLOR_SUPERFICIE = "#1D2632"   # hover suave
+COLOR_SELECCION = "#17323A"    # elemento seleccionado (acento muy apagado)
+COLOR_HOVER = "#222D3A"
+COLOR_BORDE = "#243041"        # separadores
+COLOR_BORDE_SUAVE = "#1A2330"
+COLOR_TEXTO = "#E6EDF3"
+COLOR_TEXTO_SEC = "#8B98A8"
+COLOR_TEXTO_TENUE = "#5C6876"
+COLOR_ACENTO = "#3FB6C8"       # turquesa clínico
+COLOR_ACENTO_HOVER = "#5CC9D8"
+COLOR_OK = "#3FB97F"
+COLOR_WARN = "#E3A63B"
+COLOR_ERROR = "#E5534B"
+COLOR_VOZ = "#A98BE0"
 
-# Fondo del renderizador 3D. VTK no admite "#RRGGBB", asi que se guarda la
-# forma normalizada (0..1) equivalente al COLOR_BG de la interfaz: el visor
-# queda integrado en el mismo tono oscuro en lugar de un gris claro.
-VIEW_BG_RGB = (0.047, 0.047, 0.055)
+# Fondo del visor 3D: degradado vertical (VTK usa 0..1). Un degradado sutil
+# separa la escena del resto de la interfaz y da profundidad sin distraer.
+VIEW_BG_RGB = (0.035, 0.047, 0.063)          # abajo
+VIEW_BG_TOP_RGB = (0.090, 0.114, 0.145)      # arriba
 
-# Estructuras segmentadas (se reutilizan los colores de segmentacion_completa)
+# Colores por defecto de las estructuras del pipeline clásico
 COLOR_ESTRUCTURAS = {
     "cerebro": "#d4a69a",
     "craneo": "#e8e0d4",
@@ -43,10 +69,11 @@ COLOR_ESTRUCTURAS = {
 }
 
 # =============================================================================
-# TIPOGRAFIAS
+# TIPOGRAFÍAS
 # =============================================================================
 FUENTE_UI = "Segoe UI"
-FUENTE_MONO = "Consolas"
+FUENTE_MONO = "Cascadia Mono"
+FUENTE_MARCA = "Montserrat"
 
 FUENTE_TITULO = (FUENTE_UI, 15, "bold")
 FUENTE_SUBTITULO = (FUENTE_UI, 10, "bold")
@@ -72,11 +99,9 @@ def rgba(color, alpha):
 # HOJA DE ESTILOS GLOBAL
 # =============================================================================
 def stylesheet():
-    """Devuelve la hoja QSS global de la aplicacion.
-
-    Se aplica UNA sola vez sobre QApplication, de forma que los widgets solo
-    necesitan overrides puntuales (como el de las capas de modelo).
-    """
+    """Hoja QSS global. Se aplica una sola vez sobre QApplication."""
+    check = _icono("check.svg")
+    flecha = _icono("chevron_down.svg")
     return f"""
 QWidget {{
     background-color: {COLOR_PANEL};
@@ -84,116 +109,121 @@ QWidget {{
     font-family: "{FUENTE_UI}";
     font-size: 12px;
 }}
-
 QMainWindow, QDialog {{ background-color: {COLOR_BG}; }}
-
-/* ---------------------------------------------------------------- GroupBox */
-QGroupBox {{
-    border: 1px solid {COLOR_BORDE};
-    border-radius: 6px;
-    margin-top: 16px;
-    padding-top: 8px;
-    font-weight: bold;
-}}
-QGroupBox::title {{
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 4px;
-    color: {COLOR_TEXTO};
-}}
+QLabel {{ background: transparent; }}
 
 /* ------------------------------------------------------------------ Botones */
-QPushButton {{
+QPushButton, QToolButton {{
     background-color: {COLOR_PANEL_ALT};
     border: 1px solid {COLOR_BORDE};
     border-radius: 6px;
-    padding: 6px 13px;
+    padding: 5px 12px;
     color: {COLOR_TEXTO};
-    min-height: 22px;
+    min-height: 20px;
 }}
-QPushButton:hover {{ background-color: {COLOR_HOVER}; }}
-QPushButton:pressed {{ background-color: {COLOR_SELECCION}; }}
-QPushButton#headerAction {{
-    background-color: transparent;
-    border: 1px solid {COLOR_BORDE};
-    border-radius: 7px;
-    padding: 5px 10px;
-    min-height: 22px;
+QPushButton:hover, QToolButton:hover {{
+    background-color: {COLOR_SUPERFICIE};
+    border-color: {rgba(COLOR_ACENTO, 140)};
 }}
-QPushButton#headerAction:hover {{
-    background-color: {COLOR_PANEL_ALT};
-    border-color: {COLOR_ACENTO};
-}}
-QPushButton#headerAction:pressed {{ background-color: {COLOR_SELECCION}; }}
-QPushButton#headerAction:disabled {{
-    color: {COLOR_TEXTO_SEC};
-    background-color: transparent;
-    border-color: {COLOR_PANEL_ALT};
-}}
-QPushButton:disabled {{
-    color: {COLOR_TEXTO_SEC};
-    background-color: {COLOR_PANEL};
-    border-color: {COLOR_PANEL_ALT};
-}}
-QPushButton:checked {{
+QPushButton:pressed, QToolButton:pressed {{ background-color: {COLOR_SELECCION}; }}
+QPushButton:checked, QToolButton:checked {{
     background-color: {COLOR_SELECCION};
     border-color: {COLOR_ACENTO};
+    color: {COLOR_ACENTO_HOVER};
 }}
-
-/* Boton de icono plano (el de los timestamps/capas, estilo Raidionics) */
-QPushButton[flatButton="true"] {{
+QPushButton:disabled, QToolButton:disabled {{
+    color: {COLOR_TEXTO_TENUE};
+    background-color: {COLOR_PANEL};
+    border-color: {COLOR_BORDE_SUAVE};
+}}
+QPushButton#primario {{
+    background-color: {COLOR_ACENTO};
+    border: 1px solid {COLOR_ACENTO};
+    color: {COLOR_BG};
+    font-weight: 600;
+}}
+QPushButton#primario:hover {{ background-color: {COLOR_ACENTO_HOVER}; }}
+QPushButton#primario:disabled {{
+    background-color: {COLOR_PANEL_ALT};
+    border-color: {COLOR_BORDE_SUAVE};
+    color: {COLOR_TEXTO_TENUE};
+}}
+QPushButton#headerAction, QPushButton#fantasma, QToolButton#fantasma {{
+    background-color: transparent;
+    border: 1px solid transparent;
+    color: {COLOR_TEXTO_SEC};
+    padding: 5px 10px;
+}}
+QPushButton#headerAction:hover, QPushButton#fantasma:hover, QToolButton#fantasma:hover {{
+    background-color: {COLOR_PANEL_ALT};
+    border-color: {COLOR_BORDE};
+    color: {COLOR_TEXTO};
+}}
+QPushButton#headerAction:disabled, QPushButton#fantasma:disabled {{
+    color: {COLOR_TEXTO_TENUE};
     background: transparent;
-    border: none;
-    padding: 2px;
-    min-width: 22px;
-    max-width: 22px;
-    min-height: 22px;
-    max-height: 22px;
+    border-color: transparent;
 }}
-QPushButton[flatButton="true"]:hover {{ border: 1px solid {rgba(COLOR_BORDE, 200)}; }}
-QPushButton[flatButton="true"]:pressed {{ background-color: {COLOR_SELECCION}; }}
+/* Control segmentado (Axial / Coronal / Sagital, vistas 3D) */
+QPushButton#segmento {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: {COLOR_TEXTO_SEC};
+    padding: 4px 12px;
+}}
+QPushButton#segmento:hover {{ color: {COLOR_TEXTO}; background: {COLOR_SUPERFICIE}; }}
+QPushButton#segmento:checked {{
+    background: {COLOR_SELECCION};
+    border-color: {rgba(COLOR_ACENTO, 160)};
+    color: {COLOR_ACENTO_HOVER};
+}}
+QFrame#grupoSegmentado {{
+    background: {COLOR_BG};
+    border: 1px solid {COLOR_BORDE};
+    border-radius: 7px;
+}}
 
 /* ------------------------------------------------------------- Entrada de texto */
 QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{
-    background-color: {COLOR_PANEL_ALT};
+    background-color: {COLOR_BG};
     border: 1px solid {COLOR_BORDE};
-    border-radius: 4px;
-    padding: 3px 6px;
+    border-radius: 6px;
+    padding: 4px 8px;
     selection-background-color: {COLOR_ACENTO};
     selection-color: {COLOR_BG};
 }}
 QLineEdit:focus, QTextEdit:focus, QSpinBox:focus {{ border-color: {COLOR_ACENTO}; }}
+QLineEdit:read-only {{ color: {COLOR_TEXTO_SEC}; }}
 
 /* ----------------------------------------------------------------- Combos */
 QComboBox {{
     background-color: {COLOR_PANEL_ALT};
     border: 1px solid {COLOR_BORDE};
-    border-radius: 4px;
-    padding: 3px 6px;
+    border-radius: 6px;
+    padding: 4px 8px;
     min-height: 20px;
 }}
-QComboBox:hover {{ border-color: {COLOR_ACENTO}; }}
-QComboBox::drop-down {{ border: none; width: 18px; }}
+QComboBox:hover {{ border-color: {rgba(COLOR_ACENTO, 140)}; }}
+QComboBox::drop-down {{ border: none; width: 20px; }}
+QComboBox::down-arrow {{ image: url({flecha}); width: 10px; height: 10px; }}
 QComboBox QAbstractItemView {{
     background-color: {COLOR_PANEL_ALT};
     border: 1px solid {COLOR_BORDE};
     selection-background-color: {COLOR_SELECCION};
     selection-color: {COLOR_TEXTO};
     outline: none;
+    padding: 4px;
 }}
 
 /* ---------------------------------------------------------------- Listas */
 QListWidget, QTreeWidget, QTableWidget {{
     background-color: {COLOR_PANEL};
     border: 1px solid {COLOR_BORDE};
-    border-radius: 4px;
+    border-radius: 6px;
     outline: none;
 }}
-QListWidget::item, QTreeWidget::item {{
-    padding: 4px 6px;
-    border-radius: 3px;
-}}
+QListWidget::item, QTreeWidget::item {{ padding: 4px 6px; border-radius: 4px; }}
 QListWidget::item:hover, QTreeWidget::item:hover {{ background-color: {COLOR_PANEL_ALT}; }}
 QListWidget::item:selected, QTreeWidget::item:selected {{
     background-color: {COLOR_SELECCION};
@@ -201,82 +231,105 @@ QListWidget::item:selected, QTreeWidget::item:selected {{
 }}
 
 /* --------------------------------------------------------------- Sliders */
+QSlider {{ background: transparent; }}
 QSlider::groove:horizontal {{
-    height: 4px; background: {COLOR_PANEL_ALT}; border-radius: 2px;
+    height: 4px; background: {COLOR_BORDE}; border-radius: 2px;
 }}
 QSlider::sub-page:horizontal {{ background: {COLOR_ACENTO}; border-radius: 2px; }}
 QSlider::handle:horizontal {{
-    background: {COLOR_TEXTO}; width: 12px; margin: -5px 0; border-radius: 6px;
+    background: {COLOR_TEXTO}; width: 12px; height: 12px;
+    margin: -4px 0; border-radius: 6px;
 }}
+QSlider::handle:horizontal:hover {{ background: {COLOR_ACENTO_HOVER}; }}
+QSlider::groove:horizontal:disabled {{ background: {COLOR_BORDE_SUAVE}; }}
+QSlider::sub-page:horizontal:disabled {{ background: {COLOR_BORDE}; }}
+QSlider::handle:horizontal:disabled {{ background: {COLOR_TEXTO_TENUE}; }}
 
 /* --------------------------------------------------------------- Checkbox */
-QCheckBox, QRadioButton {{ spacing: 6px; }}
+QCheckBox, QRadioButton {{ spacing: 8px; background: transparent; }}
 QCheckBox::indicator, QRadioButton::indicator {{ width: 14px; height: 14px; }}
 QCheckBox::indicator:unchecked {{
-    border: 1px solid {COLOR_BORDE}; border-radius: 3px; background: {COLOR_PANEL_ALT};
+    border: 1px solid {COLOR_TEXTO_TENUE}; border-radius: 4px; background: {COLOR_BG};
 }}
+QCheckBox::indicator:unchecked:hover {{ border-color: {COLOR_ACENTO}; }}
 QCheckBox::indicator:checked {{
-    border: 1px solid {COLOR_ACENTO}; border-radius: 3px; background: {COLOR_ACENTO};
+    border: 1px solid {COLOR_ACENTO}; border-radius: 4px;
+    background: {COLOR_ACENTO}; image: url({check});
 }}
+QCheckBox::indicator:indeterminate {{
+    border: 1px solid {COLOR_ACENTO}; border-radius: 4px; background: {rgba(COLOR_ACENTO, 90)};
+}}
+QCheckBox:disabled {{ color: {COLOR_TEXTO_TENUE}; }}
 
 /* ------------------------------------------------------------- Separadores */
-QSplitter::handle {{ background: {COLOR_BORDE}; }}
-QSplitter::handle:horizontal {{ width: 2px; }}
-QSplitter::handle:vertical {{ height: 2px; }}
-QTabWidget::pane {{ border: 1px solid {COLOR_BORDE}; border-radius: 4px; top: -1px; }}
+QSplitter::handle {{ background: {COLOR_BG}; }}
+QSplitter::handle:hover {{ background: {COLOR_BORDE}; }}
+QSplitter::handle:horizontal {{ width: 6px; }}
+QSplitter::handle:vertical {{ height: 6px; }}
+
+/* --------------------------------------------------------------- Pestañas */
+QTabWidget::pane {{ border: none; background: {COLOR_BG}; top: 0px; }}
+QTabBar {{ background: transparent; }}
 QTabBar::tab {{
-    background: {COLOR_PANEL};
-    border: 1px solid {COLOR_BORDE};
-    padding: 8px 18px;
-    margin-right: 2px;
-    border-top-left-radius: 4px; border-top-right-radius: 4px;
+    background: transparent;
+    color: {COLOR_TEXTO_SEC};
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 9px 18px 8px 18px;
+    margin-right: 4px;
+    font-weight: 600;
 }}
-QTabBar::tab:selected {{
-    background: {COLOR_PANEL_ALT};
-    border-bottom-color: {COLOR_PANEL_ALT};
-    color: {COLOR_ACENTO};
-}}
+QTabBar::tab:hover {{ color: {COLOR_TEXTO}; }}
+QTabBar::tab:selected {{ color: {COLOR_TEXTO}; border-bottom-color: {COLOR_ACENTO}; }}
 
 /* ----------------------------------------------------------------- Tooltip */
 QToolTip {{
     background-color: {COLOR_PANEL_ALT};
     color: {COLOR_TEXTO};
     border: 1px solid {COLOR_BORDE};
-    padding: 4px;
+    border-radius: 4px;
+    padding: 6px 8px;
 }}
 
-QScrollBar:vertical {{
-    background: {COLOR_BG};
-    width: 10px;
-    margin: 2px;
-}}
-QScrollBar::handle:vertical {{
-    background: {COLOR_BORDE};
-    min-height: 24px;
-    border-radius: 5px;
-}}
-QScrollBar::handle:vertical:hover {{ background: {COLOR_ACENTO}; }}
+/* --------------------------------------------------------------- Scroll */
+QScrollArea {{ border: none; background: transparent; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: {COLOR_BORDE}; min-height: 28px; border-radius: 4px; }}
+QScrollBar::handle:vertical:hover {{ background: {COLOR_TEXTO_TENUE}; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-QScrollBar:horizontal {{
-    background: {COLOR_BG};
-    height: 10px;
-    margin: 2px;
-}}
-QScrollBar::handle:horizontal {{
-    background: {COLOR_BORDE};
-    min-width: 24px;
-    border-radius: 5px;
-}}
-QScrollBar::handle:horizontal:hover {{ background: {COLOR_ACENTO}; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px; }}
+QScrollBar::handle:horizontal {{ background: {COLOR_BORDE}; min-width: 28px; border-radius: 4px; }}
+QScrollBar::handle:horizontal:hover {{ background: {COLOR_TEXTO_TENUE}; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 
 /* --------------------------------------------------------------- Consola */
 QTextEdit#consola {{
     background-color: {COLOR_BG};
-    font-family: "{FUENTE_MONO}";
+    font-family: "{FUENTE_MONO}", "Consolas";
     font-size: 11px;
-    border: 1px solid {COLOR_BORDE};
+    border: none;
+    border-radius: 0px;
+    padding: 6px 10px;
 }}
+
+/* --------------------------------------------------------------- Barra de estado */
+QStatusBar {{
+    background: {COLOR_PANEL};
+    color: {COLOR_TEXTO_SEC};
+    border-top: 1px solid {COLOR_BORDE_SUAVE};
+    font-size: 11px;
+}}
+QStatusBar::item {{ border: none; }}
+
+QMenu {{
+    background: {COLOR_PANEL_ALT};
+    border: 1px solid {COLOR_BORDE};
+    padding: 4px;
+}}
+QMenu::item {{ padding: 5px 18px; border-radius: 4px; }}
+QMenu::item:selected {{ background: {COLOR_SELECCION}; }}
 """
 
 

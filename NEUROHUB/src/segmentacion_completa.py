@@ -1,5 +1,5 @@
 """
-NEUROHUB - Segmentación Completa Anatómica y Exportación 3D Clínica
+ATLAS - Segmentación Completa Anatómica y Exportación 3D Clínica
 ====================================================================
 Segmenta cerebro, cráneo, venas, arterias y subestructuras tumorales
 con precisión anatómica a partir de máscaras NIfTI y volúmenes BraTS/MR.
@@ -1000,7 +1000,7 @@ def exportar_fbx_bpy(stl_dir=None, fbx_dir=None):
         bpy.context.view_layer.objects.active = mesh_objects[0]
         bpy.ops.object.join()
         joined = bpy.context.active_object
-        joined.name = "NEUROHUB"
+        joined.name = "ATLAS"
         print(f"[FBX] Objeto único: {joined.name} "
               f"({len(joined.data.polygons):,} caras, "
               f"{len(joined.data.materials)} materiales)")
@@ -1090,7 +1090,7 @@ def exportar_para_unity(mri_path=None):
         dict: resumen de la exportación
     """
     print("=" * 60)
-    print("NEUROHUB - Segmentación y Exportación 3D para Unity")
+    print("ATLAS - Segmentación y Exportación 3D para Unity")
     print("=" * 60)
 
     print("\n[1/3] Generando mallas 3D de máxima resolución...")

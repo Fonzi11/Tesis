@@ -1,5 +1,5 @@
 """
-NEUROHUB - Extraccion de los estudios DICOM de "Imagenes pacientes"
+ATLAS - Extraccion de los estudios DICOM de "Imagenes pacientes"
 ====================================================================
 Los ZIP exports de la plataforma de imagenes usan BACKSLASH como separador de
 rutas (`DICOM\\xxxx.dcm`). unzip lo rechaza y SimpleITK tampoco encuentra los

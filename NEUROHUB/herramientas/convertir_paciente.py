@@ -1,5 +1,5 @@
 """
-NEUROHUB - DICOM de paciente -> NIfTI, eligiendo la serie correcta
+ATLAS - DICOM de paciente -> NIfTI, eligiendo la serie correcta
 ===============================================================
 Un estudio de "Imagenes pacientes" no es una sola serie: son varias (cabeza
 angulada 0.5 mm, reconstrucciones 5 mm, AiCE, y las localizadores de 2-6

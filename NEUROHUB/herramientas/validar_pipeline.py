@@ -1,4 +1,4 @@
-"""Validación final del pipeline NEUROHUB: segmentación + FBX."""
+"""Validación final del pipeline ATLAS: segmentación + FBX."""
 import os
 import sys
 

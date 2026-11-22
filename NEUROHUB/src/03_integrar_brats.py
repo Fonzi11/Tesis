@@ -227,7 +227,7 @@ def integrate_brats_into_pipeline(nifti_path, output_dir="segmentaciones_ai"):
                   "no puede alimentar el modelo. Se usará el método heurístico "
                   "morfológico como respaldo.")
             print("[INTEGRACIÓN] 💡 Cargue un paciente BraTS completo (carpeta "
-                  "con *_flair, *_t1, *_t1ce y *_t2) y NEUROHUB activará la "
+                  "con *_flair, *_t1, *_t1ce y *_t2) y ATLAS activará la "
                   "segmentación IA automáticamente.")
             brats_results = segment_tumor_brats_from_single_volume(
                 nifti_path,
