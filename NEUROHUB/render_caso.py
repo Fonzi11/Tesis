@@ -1,5 +1,5 @@
 """
-NEUROHUB - Render headless de un caso
+ATLAS - Render headless de un caso
 ===================================
 Genera vistas PNG de las mallas STL usando exactamente los ajustes que ya
 valida el visor, para que la consola y la aplicacion muestren lo mismo.

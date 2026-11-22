@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="31" result="Passed" total="31" passed="31" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:25:02Z" duration="16,4696683">
+  <test-suite type="TestSuite" id="1000" name="ATLAS MR" fullname="ATLAS MR" runstate="Runnable" testcasecount="31" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:25:02Z" duration="16.469668" total="31" passed="31" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties />
+    <test-suite type="Assembly" id="1037" name="NeuroHub.Tests.dll" fullname="D:/Tesis/NEUROHUB/unity/NeuroHubMR/Library/ScriptAssemblies/NeuroHub.Tests.dll" runstate="Runnable" testcasecount="31" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:25:02Z" duration="16.460381" total="31" passed="31" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="35592" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+      </properties>
+      <test-suite type="TestFixture" id="1001" name="NeuroHubSimulationTests" fullname="NeuroHubSimulationTests" classname="NeuroHubSimulationTests" runstate="Runnable" testcasecount="31" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:25:02Z" duration="16.457771" total="31" passed="31" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="ParameterizedMethod" id="1012" name="Estudio_CargaCompletaConLesionYEscalaReal" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.682497" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+          </properties>
+          <test-case id="1002" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;tumor_02&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;tumor_02&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1583227121" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.134597" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02 cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1003" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;aneurisma_05&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;aneurisma_05&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="853956154" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.069750" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05 cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1004" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00000&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00000&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1741081982" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.062722" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1005" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00003&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00003&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="188167632" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.061930" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1006" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00006&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00006&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="14258031" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.073112" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1007" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;tumor_02_ligero&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;tumor_02_ligero&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="252379295" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.052826" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02_ligero cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1008" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;aneurisma_05_ligero&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;aneurisma_05_ligero&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1698995965" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.051362" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05_ligero cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1009" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00000_ligero&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00000_ligero&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1784815066" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.056370" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000_ligero cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1010" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00003_ligero&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00003_ligero&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1069472289" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.053958" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003_ligero cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1011" name="Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00006_ligero&quot;)" fullname="NeuroHubSimulationTests.Estudio_CargaCompletaConLesionYEscalaReal(&quot;brats_00006_ligero&quot;)" methodname="Estudio_CargaCompletaConLesionYEscalaReal" classname="NeuroHubSimulationTests" runstate="Runnable" seed="407076692" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:46Z" duration="0.054958" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006_ligero cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+        </test-suite>
+        <test-suite type="ParameterizedMethod" id="1018" name="Gestos_ManosSimuladas" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-11-22 20:24:46Z" end-time="2026-11-22 20:24:49Z" duration="2.336328" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+          </properties>
+          <test-case id="1013" name="Gestos_ManosSimuladas(&quot;tumor_02&quot;)" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas(&quot;tumor_02&quot;)" methodname="Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1504372379" result="Passed" start-time="2026-11-22 20:24:47Z" end-time="2026-11-22 20:24:47Z" duration="0.449748" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02 cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1014" name="Gestos_ManosSimuladas(&quot;aneurisma_05&quot;)" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas(&quot;aneurisma_05&quot;)" methodname="Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1852577307" result="Passed" start-time="2026-11-22 20:24:47Z" end-time="2026-11-22 20:24:47Z" duration="0.461888" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05 cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1015" name="Gestos_ManosSimuladas(&quot;brats_00000&quot;)" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas(&quot;brats_00000&quot;)" methodname="Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="2088142012" result="Passed" start-time="2026-11-22 20:24:47Z" end-time="2026-11-22 20:24:48Z" duration="0.462457" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1016" name="Gestos_ManosSimuladas(&quot;brats_00003&quot;)" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas(&quot;brats_00003&quot;)" methodname="Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="89442896" result="Passed" start-time="2026-11-22 20:24:48Z" end-time="2026-11-22 20:24:48Z" duration="0.471914" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1017" name="Gestos_ManosSimuladas(&quot;brats_00006&quot;)" fullname="NeuroHubSimulationTests.Gestos_ManosSimuladas(&quot;brats_00006&quot;)" methodname="Gestos_ManosSimuladas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1424166013" result="Passed" start-time="2026-11-22 20:24:48Z" end-time="2026-11-22 20:24:49Z" duration="0.479564" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+        </test-suite>
+        <test-case id="1036" name="OpenXR_MockRuntime_SesionYSubsistemas" fullname="NeuroHubSimulationTests.OpenXR_MockRuntime_SesionYSubsistemas" methodname="OpenXR_MockRuntime_SesionYSubsistemas" classname="NeuroHubSimulationTests" runstate="Runnable" seed="337826232" result="Passed" start-time="2026-11-22 20:24:49Z" end-time="2026-11-22 20:24:56Z" duration="7.149896" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+          </properties>
+          <output><![CDATA[ATLAS: estudio tumor_02 cargado (31 estructuras, lesión: tumor).
+]]></output>
+        </test-case>
+        <test-suite type="ParameterizedMethod" id="1024" name="Render_URPActivoSinShadersDeError" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.493618" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+          </properties>
+          <test-case id="1019" name="Render_URPActivoSinShadersDeError(&quot;tumor_02&quot;)" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError(&quot;tumor_02&quot;)" methodname="Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" seed="674185460" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.240301" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02 cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1020" name="Render_URPActivoSinShadersDeError(&quot;aneurisma_05&quot;)" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError(&quot;aneurisma_05&quot;)" methodname="Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1257081119" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.067067" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05 cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1021" name="Render_URPActivoSinShadersDeError(&quot;brats_00000&quot;)" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError(&quot;brats_00000&quot;)" methodname="Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1430597441" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.058778" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1022" name="Render_URPActivoSinShadersDeError(&quot;brats_00003&quot;)" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError(&quot;brats_00003&quot;)" methodname="Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" seed="897595969" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.060891" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1023" name="Render_URPActivoSinShadersDeError(&quot;brats_00006&quot;)" fullname="NeuroHubSimulationTests.Render_URPActivoSinShadersDeError(&quot;brats_00006&quot;)" methodname="Render_URPActivoSinShadersDeError" classname="NeuroHubSimulationTests" runstate="Runnable" seed="835831011" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:56Z" duration="0.056218" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+        </test-suite>
+        <test-suite type="ParameterizedMethod" id="1035" name="Rendimiento_RenderEstereoQuest3" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:25:02Z" duration="5.775113" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+          </properties>
+          <test-case id="1025" name="Rendimiento_RenderEstereoQuest3(&quot;tumor_02&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;tumor_02&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="473783182" result="Passed" start-time="2026-11-22 20:24:56Z" end-time="2026-11-22 20:24:57Z" duration="0.554394" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02 cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1026" name="Rendimiento_RenderEstereoQuest3(&quot;aneurisma_05&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;aneurisma_05&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="2006525853" result="Passed" start-time="2026-11-22 20:24:57Z" end-time="2026-11-22 20:24:58Z" duration="0.613237" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05 cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1027" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00000&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00000&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1419676074" result="Passed" start-time="2026-11-22 20:24:58Z" end-time="2026-11-22 20:24:58Z" duration="0.601907" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1028" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00003&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00003&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="88655931" result="Passed" start-time="2026-11-22 20:24:58Z" end-time="2026-11-22 20:24:59Z" duration="0.627141" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1029" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00006&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00006&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="652010566" result="Passed" start-time="2026-11-22 20:24:59Z" end-time="2026-11-22 20:24:59Z" duration="0.580259" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006 cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1030" name="Rendimiento_RenderEstereoQuest3(&quot;tumor_02_ligero&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;tumor_02_ligero&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="1254146108" result="Passed" start-time="2026-11-22 20:24:59Z" end-time="2026-11-22 20:25:00Z" duration="0.573041" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio tumor_02_ligero cargado (31 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1031" name="Rendimiento_RenderEstereoQuest3(&quot;aneurisma_05_ligero&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;aneurisma_05_ligero&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="523792521" result="Passed" start-time="2026-11-22 20:25:00Z" end-time="2026-11-22 20:25:01Z" duration="0.563956" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio aneurisma_05_ligero cargado (30 estructuras, lesión: aneurisma).
+]]></output>
+          </test-case>
+          <test-case id="1032" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00000_ligero&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00000_ligero&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="553529731" result="Passed" start-time="2026-11-22 20:25:01Z" end-time="2026-11-22 20:25:01Z" duration="0.557572" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00000_ligero cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1033" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00003_ligero&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00003_ligero&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="854080572" result="Passed" start-time="2026-11-22 20:25:01Z" end-time="2026-11-22 20:25:02Z" duration="0.533787" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00003_ligero cargado (30 estructuras, lesión: tumor).
+]]></output>
+          </test-case>
+          <test-case id="1034" name="Rendimiento_RenderEstereoQuest3(&quot;brats_00006_ligero&quot;)" fullname="NeuroHubSimulationTests.Rendimiento_RenderEstereoQuest3(&quot;brats_00006_ligero&quot;)" methodname="Rendimiento_RenderEstereoQuest3" classname="NeuroHubSimulationTests" runstate="Runnable" seed="894883815" result="Passed" start-time="2026-11-22 20:25:02Z" end-time="2026-11-22 20:25:02Z" duration="0.558877" asserts="0">
+            <properties />
+            <output><![CDATA[ATLAS: estudio brats_00006_ligero cargado (30 estructuras, lesión: tumor).
+ATLAS: resultados de simulación en D:\Tesis\NEUROHUB\unity\NeuroHubMR\SimulationResults\simulacion_resultados.json
+]]></output>
+          </test-case>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

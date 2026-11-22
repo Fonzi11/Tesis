@@ -1,4 +1,4 @@
-# Flujo de neuronavegación: NEUROHUB → Unity → gafas AR
+# Flujo de neuronavegación: ATLAS → Unity → gafas AR
 
 Este diagrama describe el flujo recomendado para transformar un estudio
 DICOM/NIfTI en una escena de neuronavegación en Unity y desplegarla en unas
@@ -29,7 +29,7 @@ flowchart LR
         DICOM --> METADATA --> NIFTI
     end
 
-    subgraph NEURO["02 · NEUROHUB"]
+    subgraph NEURO["02 · ATLAS"]
         LOAD["Carga del caso<br/>launcher.py ui"]:::process
         VIEW2D["Revisión 2D<br/>axial · coronal · sagital"]:::process
         DRAW["Delineado asistido<br/>pincel · borrar · deshacer"]:::process
@@ -104,7 +104,7 @@ flowchart LR
 ## Lectura rápida del flujo
 
 1. **Entrada:** se conserva el volumen original y sus metadatos espaciales.
-2. **NEUROHUB:** se revisan cortes 2D, se dibuja o valida la lesión y se
+2. **ATLAS:** se revisan cortes 2D, se dibuja o valida la lesión y se
    generan las máscaras anatómicas.
 3. **Superficie:** las máscaras se convierten en mallas 3D con la misma escala
    espacial del estudio.

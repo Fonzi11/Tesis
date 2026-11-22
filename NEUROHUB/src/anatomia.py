@@ -1,5 +1,5 @@
 """
-NEUROHUB - Panel de Anatomía Interactivo con Turtle
+ATLAS - Panel de Anatomía Interactivo con Turtle
 ====================================================
 Dibuja diagrama del cerebro con estructuras tumor/aneurisma.
 Controles: flechas ←→ o A/D para navegar, ESC para salir.
@@ -54,7 +54,7 @@ class AnatomiaTurtle:
         self.t = turtle.Turtle()
         screen = turtle.Screen()
         screen.bgcolor(BG)
-        screen.title("NEUROHUB - Anatomía Cerebral Interactiva")
+        screen.title("ATLAS - Anatomía Cerebral Interactiva")
         screen.setup(1100, 800)
         screen.tracer(0)
 

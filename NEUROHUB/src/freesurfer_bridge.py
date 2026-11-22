@@ -2,7 +2,7 @@
 
 FreeSurfer no se distribuye como paquete pip y en Windows normalmente se
 ejecuta dentro de WSL. Este modulo mantiene esa dependencia fuera del resto de
-NEUROHUB y expone una interfaz segura para los comandos mas utiles:
+ATLAS y expone una interfaz segura para los comandos mas utiles:
 ``recon-all``, conversion NIfTI/MGH, estadisticas y mascaras de ``aseg``.
 """
 
@@ -18,6 +18,8 @@ from pathlib import Path
 _SUJETO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _COMANDOS = (
     "recon-all",
+    "mri_synthseg",
+    "mri_tumorsynth",
     "mri_convert",
     "mris_convert",
     "mri_binarize",
@@ -40,13 +42,13 @@ class Instalacion:
         return bool(self.recon_all)
 
 
-def _buscar_nativo():
+def _buscar_nativo(comando="recon-all"):
     home = os.environ.get("FREESURFER_HOME")
     candidatos = []
     if home:
-        candidatos.append(os.path.join(home, "bin", "recon-all"))
-        candidatos.append(os.path.join(home, "bin", "recon-all.exe"))
-    encontrado = shutil.which("recon-all")
+        candidatos.append(os.path.join(home, "bin", comando))
+        candidatos.append(os.path.join(home, "bin", comando + ".exe"))
+    encontrado = shutil.which(comando)
     if encontrado:
         candidatos.insert(0, encontrado)
     for candidato in candidatos:
@@ -56,7 +58,7 @@ def _buscar_nativo():
     return None
 
 
-def _buscar_wsl():
+def _buscar_wsl(comando="recon-all"):
     wsl = shutil.which("wsl.exe") or shutil.which("wsl")
     if not wsl:
         return None
@@ -65,7 +67,7 @@ def _buscar_wsl():
                "if [ -f /usr/local/freesurfer/7.4.1/SetUpFreeSurfer.sh ]; "
                "then export FREESURFER_HOME=/usr/local/freesurfer/7.4.1; "
                "source /usr/local/freesurfer/7.4.1/SetUpFreeSurfer.sh "
-               ">/dev/null 2>&1; command -v recon-all; fi"]
+               ">/dev/null 2>&1; command -v %s; fi" % comando]
     comando = ["--distribution", distro] + comando
     try:
         resultado = subprocess.run(
@@ -81,24 +83,25 @@ def _buscar_wsl():
     return Instalacion("wsl", home, recon_all[0].strip(), distro)
 
 
-def detectar():
-    """Devuelve la instalación disponible, priorizando nativa y luego WSL."""
-    return _buscar_nativo() or _buscar_wsl() or Instalacion(
+def detectar(comando="recon-all"):
+    """Devuelve el backend que contiene ``comando``, priorizando nativo/WSL."""
+    return _buscar_nativo(comando) or _buscar_wsl(comando) or Instalacion(
         "none", os.environ.get("FREESURFER_HOME"), None,
         os.environ.get("FREESURFER_WSL_DISTRO"),
     )
 
 
-def diagnostico():
-    """Devuelve ``None`` si FreeSurfer puede ejecutarse o un mensaje útil."""
-    instalacion = detectar()
+def diagnostico(comando="recon-all"):
+    """Devuelve ``None`` si el comando de FreeSurfer puede ejecutarse."""
+    instalacion = detectar(comando)
     if instalacion.disponible:
         return None
     if instalacion.backend == "none":
         return ("FreeSurfer no está en PATH ni en FREESURFER_HOME. "
                 "En Windows instala FreeSurfer dentro de WSL y configura "
                 "FREESURFER_WSL_DISTRO si tienes varias distribuciones.")
-    return "Se encontró el backend %s, pero no recon-all." % instalacion.backend
+    return "Se encontró el backend %s, pero no %s." % (
+        instalacion.backend, comando)
 
 
 def _validar_sujeto(subject):
@@ -131,9 +134,9 @@ def _wsl_path(ruta, instalacion):
     )
 
 
-def _ruta_backend(ruta):
+def _ruta_backend(ruta, comando="recon-all"):
     """Convierte una ruta del anfitrión al formato del backend activo."""
-    instalacion = detectar()
+    instalacion = detectar(comando)
     if instalacion.backend == "wsl":
         return _wsl_path(ruta, instalacion)
     return ruta
@@ -167,11 +170,13 @@ def _comando(instalacion, args, env):
     return [wsl] + comando, None
 
 
-def ejecutar(args, log_path=None, env_extra=None, check=True):
-    """Ejecuta un comando FreeSurfer y conserva stdout/stderr en un log."""
-    instalacion = detectar()
+def ejecutar(args, log_path=None, env_extra=None, check=True,
+             output_callback=None):
+    """Ejecuta FreeSurfer, conserva el log y opcionalmente retransmite su salida."""
+    comando_requerido = str(args[0]) if args else "recon-all"
+    instalacion = detectar(comando_requerido)
     if not instalacion.disponible:
-        raise RuntimeError(diagnostico())
+        raise RuntimeError(diagnostico(comando_requerido))
     env = os.environ.copy()
     if instalacion.home:
         env["FREESURFER_HOME"] = instalacion.home
@@ -183,15 +188,33 @@ def ejecutar(args, log_path=None, env_extra=None, check=True):
     if comando_env is None:
         comando_env = env
     log_handle = None
+    resultado = None
     try:
         if log_path:
             Path(log_path).parent.mkdir(parents=True, exist_ok=True)
             log_handle = open(log_path, "w", encoding="utf-8")
-        resultado = subprocess.run(
-            comando, cwd=None, env=comando_env, text=True,
-            stdout=log_handle or subprocess.PIPE,
-            stderr=subprocess.STDOUT, check=False,
-        )
+        if output_callback is None and log_handle is None:
+            resultado = subprocess.run(
+                comando, cwd=None, env=comando_env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+        else:
+            proceso = subprocess.Popen(
+                comando, cwd=None, env=comando_env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                bufsize=1,
+            )
+            for linea in proceso.stdout:
+                if log_handle:
+                    log_handle.write(linea)
+                    log_handle.flush()
+                if output_callback:
+                    mensaje = linea.rstrip("\r\n")
+                    if mensaje:
+                        output_callback(mensaje)
+            proceso.wait()
+            resultado = subprocess.CompletedProcess(
+                comando, proceso.returncode)
     finally:
         if log_handle:
             log_handle.close()
@@ -203,7 +226,7 @@ def ejecutar(args, log_path=None, env_extra=None, check=True):
 
 
 def recon_all(input_path, subject, subjects_dir, license_path=None,
-              log_path=None, extra_args=None):
+              log_path=None, extra_args=None, output_callback=None):
     """Ejecuta el pipeline anatómico completo de FreeSurfer."""
     _validar_sujeto(subject)
     entrada = _ruta_absoluta(input_path, "la imagen de entrada")
@@ -223,10 +246,12 @@ def recon_all(input_path, subject, subjects_dir, license_path=None,
     env = {"SUBJECTS_DIR": subjects_backend}
     if license_path:
         env["FS_LICENSE"] = _ruta_backend(os.path.abspath(license_path))
-    return ejecutar(args, log_path=log_path, env_extra=env)
+    return ejecutar(args, log_path=log_path, env_extra=env,
+                    output_callback=output_callback)
 
 
-def convertir(input_path, output_path, log_path=None, license_path=None):
+def convertir(input_path, output_path, log_path=None, license_path=None,
+              output_callback=None):
     """Convierte entre formatos soportados por ``mri_convert``."""
     entrada = _ruta_absoluta(input_path, "la imagen de entrada")
     salida = _ruta_absoluta(output_path, "la imagen de salida")
@@ -240,7 +265,7 @@ def convertir(input_path, output_path, log_path=None, license_path=None):
         env["FS_LICENSE"] = _ruta_backend(os.path.abspath(license_path))
     return ejecutar(["mri_convert", _ruta_backend(entrada),
                      _ruta_backend(salida)], log_path=log_path,
-                    env_extra=env)
+                    env_extra=env, output_callback=output_callback)
 
 
 def exportar_superficies(subjects_dir, subject, output_dir, log_path=None,
@@ -306,10 +331,75 @@ def exportar_estadisticas(subjects_dir, subject, output_dir, log_path=None):
 
 
 def segmentar(input_path, subject, subjects_dir, output_path,
-              license_path=None, log_path=None):
+              license_path=None, log_path=None, output_callback=None):
     """Ejecuta ``recon-all`` y exporta la segmentación anatómica de ``aseg``."""
     recon_all(input_path, subject, subjects_dir, license_path=license_path,
-              log_path=log_path)
+              log_path=log_path, output_callback=output_callback)
     subjects = _ruta_absoluta(subjects_dir, "SUBJECTS_DIR")
     aseg = os.path.join(subjects, subject, "mri", "aseg.mgz")
-    return convertir(aseg, output_path, log_path=log_path)
+    return convertir(aseg, output_path, log_path=log_path,
+                     output_callback=output_callback)
+
+
+def synthseg(input_path, output_path, license_path=None, log_path=None,
+             robust=False, parcellation=False, threads=None, cpu=False,
+             output_callback=None):
+    """Ejecuta FreeSurfer SynthSeg sobre una imagen NIfTI."""
+    entrada = _ruta_absoluta(input_path, "la imagen de entrada")
+    salida = _ruta_absoluta(output_path, "la imagen de salida")
+    if not os.path.isfile(entrada):
+        raise FileNotFoundError(entrada)
+    os.makedirs(os.path.dirname(salida), exist_ok=True)
+    args = ["mri_synthseg", "--i", _ruta_backend(entrada, "mri_synthseg"),
+            "--o", _ruta_backend(salida, "mri_synthseg")]
+    if robust:
+        args.append("--robust")
+    if parcellation:
+        args.append("--parc")
+    if threads is not None:
+        if threads < 1:
+            raise ValueError("--threads debe ser mayor que cero.")
+        args.extend(["--threads", str(threads)])
+    if cpu:
+        args.append("--cpu")
+    env = {}
+    if license_path:
+        licencia = _ruta_absoluta(license_path, "la licencia")
+        if not os.path.isfile(licencia):
+            raise FileNotFoundError(licencia)
+        env["FS_LICENSE"] = _ruta_backend(licencia, "mri_synthseg")
+    return ejecutar(args, log_path=log_path, env_extra=env,
+                    output_callback=output_callback)
+
+
+def tumorsynth(input_paths, output_path, mode="wholetumor", license_path=None,
+               log_path=None, threads=None, cpu=False, output_callback=None):
+    """Ejecuta FreeSurfer TumorSynth en modo tumor completo o subestructuras."""
+    entradas = [p.strip() for p in str(input_paths).split(",") if p.strip()]
+    if not entradas:
+        raise ValueError("Falta la imagen de entrada.")
+    rutas = [_ruta_absoluta(p, "la imagen de entrada") for p in entradas]
+    for ruta in rutas:
+        if not os.path.isfile(ruta):
+            raise FileNotFoundError(ruta)
+    salida = _ruta_absoluta(output_path, "la imagen de salida")
+    os.makedirs(os.path.dirname(salida), exist_ok=True)
+    if mode not in ("wholetumor", "innertumor"):
+        raise ValueError("El modo TumorSynth debe ser wholetumor o innertumor.")
+    args = ["mri_tumorsynth", "--i",
+            ",".join(_ruta_backend(ruta, "mri_tumorsynth") for ruta in rutas),
+            "--o", _ruta_backend(salida, "mri_tumorsynth"), "--" + mode]
+    if threads is not None:
+        if threads < 1:
+            raise ValueError("--threads debe ser mayor que cero.")
+        args.extend(["--threads", str(threads)])
+    if cpu:
+        args.append("--cpu")
+    env = {}
+    if license_path:
+        licencia = _ruta_absoluta(license_path, "la licencia")
+        if not os.path.isfile(licencia):
+            raise FileNotFoundError(licencia)
+        env["FS_LICENSE"] = _ruta_backend(licencia, "mri_tumorsynth")
+    return ejecutar(args, log_path=log_path, env_extra=env,
+                    output_callback=output_callback)

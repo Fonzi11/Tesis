@@ -40,9 +40,9 @@ import traceback
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
-# `src.ui_qt` se importa como `src.*` desde NEUROHUB, mientras que el motor de
+# `src.ui_qt` se importa como `src.*` desde ATLAS, mientras que el motor de
 # radiomics se importa como `radiomics.*` desde src/. hacen falta las dos raices
-# en el path, y por eso el orden importa: NEUROHUB gana si se inserta despues.
+# en el path, y por eso el orden importa: ATLAS gana si se inserta despues.
 SRC = os.path.join(RAIZ, "NEUROHUB", "src")
 NEUROHUB = os.path.join(RAIZ, "NEUROHUB")
 for _ruta in (SRC, NEUROHUB):
@@ -446,7 +446,7 @@ def etapa_pipeline(informe):
 # =============================================================================
 def main():
     ap = argparse.ArgumentParser(
-        description="Verificacion integral de NEUROHUB (pipeline + radiomics)",
+        description="Verificacion integral de ATLAS (pipeline + radiomics)",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--todo", action="store_true",
                     help="ejecuta tambien las etapas lentas (slicer, paridad, "
@@ -463,7 +463,7 @@ def main():
         pedidas = ETAPAS if args.todo else ETAPAS_RAPIDAS
 
     print("=" * 78)
-    print("VERIFICACION INTEGRAL DE NEUROHUB")
+    print("VERIFICACION INTEGRAL DE ATLAS")
     print("Etapas: %s" % ", ".join(pedidas))
     print("=" * 78, flush=True)
 

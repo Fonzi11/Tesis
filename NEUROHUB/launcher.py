@@ -1,6 +1,6 @@
 
 """
-NEUROHUB - Lanzador
+ATLAS - Lanzador
 ===================
 
 Punto de entrada UNICO del proyecto. Reune en un solo comando todo lo que
@@ -14,6 +14,7 @@ verificacion integral.
     python launcher.py verificar --todo     # verificacion completa
     python launcher.py radiomics --help     # extraccion sobre un NIfTI
     python launcher.py raidionics estado    # si Docker puede correr Raidionics
+    python launcher.py dicom carpeta_dicom  # todas las series DICOM a NIfTI
     python launcher.py freesurfer estado    # si FreeSurfer puede correr
     python launcher.py freesurfer recon-all imagen.nii.gz sujeto
     python launcher.py doctor               # estado de TODO el entorno
@@ -100,9 +101,9 @@ def _preparar_rutas():
     """
     Deja el import de `src.*` funcionando y se posiciona en la raiz.
 
-    `src.ui_qt` se importa como `src.*` desde NEUROHUB, mientras que el motor de
+    `src.ui_qt` se importa como `src.*` desde ATLAS, mientras que el motor de
     radiomics se importa como `radiomics.*` desde src/. Hacen falta las dos
-    raices en el path, y por eso el orden importa: NEUROHUB entra despues para
+    raices en el path, y por eso el orden importa: ATLAS entra despues para
     ganar.
     """
     for ruta in (os.path.join(RAIZ, "src"), RAIZ):
@@ -125,7 +126,7 @@ def cmd_doctor(_args):
     import platform
 
     print("=" * 72)
-    print("  NEUROHUB - estado del entorno")
+    print("  ATLAS - estado del entorno")
     print("=" * 72)
     print("Python      : %s (%s)" % (platform.python_version(), sys.executable))
     print("Plataforma  : %s %s" % (platform.system(), platform.release()))
@@ -155,6 +156,11 @@ def cmd_doctor(_args):
         if fs.disponible:
             print("  FreeSurfer  : disponible (%s, %s)" %
                   (fs.backend, fs.recon_all))
+            for comando in ("mri_synthseg", "mri_tumorsynth"):
+                herramienta = detectar(comando)
+                print("  %-12s: %s" % (
+                    comando, "disponible (%s)" % herramienta.backend
+                    if herramienta.disponible else "no encontrado"))
         else:
             print("  FreeSurfer  : no disponible -> %s" % diagnostico())
     except Exception as exc:                        # pragma: no cover
@@ -279,6 +285,23 @@ def cmd_raidionics(args):
     print("\nResultados en %s" % salida)
 
 
+def cmd_dicom(args):
+    """Convierte todas las series DICOM de una carpeta a volúmenes NIfTI."""
+    _preparar_rutas()
+    import importlib
+    pipeline_01 = importlib.import_module("01_procesamiento_dicom")
+
+    salida = args.salida or os.path.join(PADRE, "salidas", "nifti")
+    try:
+        resultados = pipeline_01.dicom_series_to_nifti(args.entrada, salida)
+    except (FileNotFoundError, RuntimeError, OSError) as exc:
+        print("Conversión DICOM falló: %s" % exc)
+        return 1
+    print("\nSe convirtieron %d series DICOM en %s" %
+          (len(resultados), salida))
+    return 0
+
+
 # =============================================================================
 # FREESURFER: motor externo nativo o WSL
 # =============================================================================
@@ -287,7 +310,7 @@ def cmd_freesurfer(args):
     _preparar_rutas()
     from freesurfer_bridge import (detectar, diagnostico, recon_all, convertir,
                                    exportar_estadisticas, exportar_mascara,
-                                   segmentar)
+                                   segmentar, synthseg, tumorsynth)
 
     if args.accion == "estado":
         fs = detectar()
@@ -300,6 +323,11 @@ def cmd_freesurfer(args):
         print("  comando : %s" % fs.recon_all)
         if fs.wsl_distribution:
             print("  distro  : %s" % fs.wsl_distribution)
+        for comando in ("mri_synthseg", "mri_tumorsynth"):
+            herramienta = detectar(comando)
+            print("  %-12s: %s" % (
+                comando, "disponible (%s)" % herramienta.backend
+                if herramienta.disponible else "no encontrado"))
         return 0
 
     sujeto = args.sujeto or (
@@ -321,6 +349,21 @@ def cmd_freesurfer(args):
                 segmentar(args.estudio, args.sujeto, subjects, salida,
                           license_path=args.licencia, log_path=log)
                 print("Segmentación FreeSurfer exportada: %s" % salida)
+        elif args.accion == "synthseg":
+            salida = args.salida or os.path.join(
+                PADRE, "salidas", "segmentaciones_ai", "synthseg.nii.gz")
+            synthseg(args.estudio, salida, license_path=args.licencia,
+                     log_path=log, robust=args.robusto,
+                     parcellation=args.parcellation, threads=args.threads,
+                     cpu=args.cpu)
+            print("Segmentación SynthSeg exportada: %s" % salida)
+        elif args.accion == "tumorsynth":
+            salida = args.salida or os.path.join(
+                PADRE, "salidas", "segmentaciones_ai", "tumorsynth.nii.gz")
+            tumorsynth(args.estudio, salida, mode=args.modo,
+                       license_path=args.licencia, log_path=log,
+                       threads=args.threads, cpu=args.cpu)
+            print("Segmentación TumorSynth exportada: %s" % salida)
         elif args.accion == "convertir":
             convertir(args.estudio, args.salida, log_path=log,
                       license_path=args.licencia)
@@ -459,7 +502,7 @@ def cmd_ui(_args):
     if not asegurar(DEPENDENCIAS, "la interfaz"):
         print("Se intenta abrir igualmente; puede que falte alguna parte.")
     print("=" * 50)
-    print("  NEUROHUB - Neuroimagenes multiplataforma")
+    print("  ATLAS - Augmented Technologies Laboratory for Advanced Surgery")
     print("=" * 50)
     try:
         from src.ui_qt.app import main as abrir
@@ -513,7 +556,7 @@ def cmd_unity(args):
     print("  Modelos        : %s" % ", ".join(
         modelo["id"] for modelo in resultado["models"]))
     print("  Importa la carpeta en Unity y ejecuta "
-          "NEUROHUB > MR > Build Study Scene.")
+          "ATLAS > MR > Build Study Scene.")
     return 0
 
 
@@ -527,7 +570,7 @@ def construir_parser():
     """
     parser = argparse.ArgumentParser(
         prog="launcher.py",
-        description="Punto de entrada unico de NEUROHUB.",
+        description="Punto de entrada unico de ATLAS.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="comando")
@@ -550,10 +593,17 @@ def construir_parser():
     p_rai.add_argument("estudio", nargs="?", help="imagen NIfTI para 'extraer'")
     p_rai.add_argument("--salida", help="carpeta donde dejar el informe")
 
+    p_dicom = sub.add_parser(
+        "dicom", help="convierte todas las series DICOM a NIfTI")
+    p_dicom.add_argument("entrada", help="carpeta con DICOM o ZIPs DICOM")
+    p_dicom.add_argument(
+        "--salida", help="carpeta destino (por defecto salidas/nifti)")
+
     p_fs = sub.add_parser("freesurfer",
                            help="procesamiento anatómico FreeSurfer (nativo/WSL)")
     p_fs.add_argument("accion", choices=["estado", "recon-all", "segmentar",
-                                         "convertir", "mascara", "estadisticas"])
+                                         "synthseg", "tumorsynth", "convertir",
+                                         "mascara", "estadisticas"])
     p_fs.add_argument("estudio", nargs="?",
                       help="NIfTI/MGH de entrada para recon-all o convertir")
     p_fs.add_argument("sujeto", nargs="?",
@@ -566,6 +616,17 @@ def construir_parser():
     p_fs.add_argument("--salida",
                       help="imagen de salida o carpeta de estadísticas")
     p_fs.add_argument("--log", help="archivo donde guardar stdout/stderr")
+    p_fs.add_argument("--robusto", action="store_true",
+                      help="usa el modo robusto de SynthSeg")
+    p_fs.add_argument("--parcellation", action="store_true",
+                      help="exporta la parcelación cortical de SynthSeg")
+    p_fs.add_argument("--modo", choices=["wholetumor", "innertumor"],
+                      default="wholetumor",
+                      help="modo de TumorSynth (por defecto wholetumor)")
+    p_fs.add_argument("--threads", type=int,
+                      help="hilos de CPU para SynthSeg/TumorSynth")
+    p_fs.add_argument("--cpu", action="store_true",
+                      help="fuerza inferencia en CPU")
 
     p_ver = sub.add_parser("verificar", help="etapas de verificacion integral")
     p_ver.add_argument("--todo", action="store_true",
@@ -583,7 +644,7 @@ def construir_parser():
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     COMANDOS = {"ui", "doctor", "casos", "unity", "radiomics", "raidionics",
-                "freesurfer", "verificar"}
+                "dicom", "freesurfer", "verificar"}
     # La ayuda tiene que verse completa y no caer en `ui`, que es el valor por
     # defecto: sin este caso, `launcher.py --help` abriria la ventana.
     if argv and argv[0] in ("-h", "--help", "help"):
@@ -601,6 +662,7 @@ def main(argv=None):
         "unity": cmd_unity,
         "radiomics": cmd_radiomics,
         "raidionics": cmd_raidionics,
+        "dicom": cmd_dicom,
         "freesurfer": cmd_freesurfer,
         "verificar": cmd_verificar,
     }[args.comando](args)

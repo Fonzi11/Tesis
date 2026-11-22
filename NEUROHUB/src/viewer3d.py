@@ -1,5 +1,5 @@
 """
-NEUROHUB - Visor 3D Interactivo con Pygame (respalvo)
+ATLAS - Visor 3D Interactivo con Pygame (respalvo)
 ======================================================
 Renderiza mallas 3D reales (cerebro, cráneo, tumor) con pygame. Es el visor
 de RESPALDO: si PyVista/VTK no está disponible, la aplicación cae aquí.
@@ -113,7 +113,7 @@ class Pygame3DViewer:
         return w, h
 
     def __init__(self, width=None, height=None,
-                 title="NEUROHUB - Visor 3D"):
+                 title="ATLAS - Visor 3D"):
         try:
             import pygame
         except ImportError:
@@ -461,7 +461,7 @@ class Pygame3DViewer:
             qlabel = "auto" if self.quality_mode_idx == 0 \
                 else f"{self.quality:.2f}x"
             info = [
-                ("NEUROHUB - VISOR 3D", ACCENT),
+                ("ATLAS - VISOR 3D", ACCENT),
                 ("", None),
                 ("Arrastrar: rotar | Rueda: zoom | Up/Down: slices", TEXT_DIM),
                 ("C:cerebro K:craneo T:tumor", TEXT_DIM),
@@ -725,7 +725,7 @@ def launch_gpu_viewer(mallas_dir=None, window_size=None):
         window_size = _tamano_ventana_gpu()
 
     print("=" * 70)
-    print("NEUROHUB - VISOR 3D GPU (cerebro / craneo / tumor)")
+    print("ATLAS - VISOR 3D GPU (cerebro / craneo / tumor)")
     print("=" * 70)
 
     # Solo las tres estructuras que produce el pipeline. El tumor arranca
@@ -747,7 +747,7 @@ def launch_gpu_viewer(mallas_dir=None, window_size=None):
             "Ejecuta primero: python NEUROHUB/pipeline.py")
 
     plotter = pv.Plotter(window_size=window_size,
-                         title="NEUROHUB - Visor 3D (cerebro / craneo / tumor)")
+                         title="ATLAS - Visor 3D (cerebro / craneo / tumor)")
     plotter.set_background("#0b0c10", top="#1f2833")
 
     # Suavizado de bordes: MSAA si el equipo lo aguanta, FXAA como reserva.
@@ -866,7 +866,7 @@ def launch_gpu_viewer(mallas_dir=None, window_size=None):
 
 
 def launch_viewer(nifti_path=None, mask_path=None,
-                  title="NEUROHUB - Visor 3D",
+                  title="ATLAS - Visor 3D",
                   cargar_mallas=True, force_pygame=False):
     """Lanza el visor 3D, priorizando el renderizador GPU acelerado por hardware.
 

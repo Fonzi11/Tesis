@@ -1,17 +1,16 @@
-# 🧠 NEUROHUB
+# ATLAS
 
-Plataforma unificada para la identificación de **tumores** y **aneurismas**
-en imágenes médicas (DICOM/NIfTI), con segmentación completa de estructuras
-cerebrales, generación de mallas 3D y exportación FBX para Unity.
+**Augmented Technologies Laboratory for Advanced Surgery** · Hospital
+Universitario San Ignacio · Pontificia Universidad Javeriana.
 
-> **Carpeta única del proyecto.** Integra lo que antes eran dos aplicaciones
-> separadas (`ATLAS/` y `NEUROHUB/`). La interfaz principal es la de ATLAS
-> (visor 3D VTK embebido con capas, opacidad, supersampling) y los módulos de
-> datos, mallas, pipeline, tests y el visor GPU de PyVista vienen de NEUROHUB.
+Plataforma del laboratorio ATLAS para preparar y revisar modelos 3D
+neuroquirúrgicos a partir de estudios DICOM/NIfTI (segmentación con
+FreeSurfer, tumores y aneurismas, mallas, exportación FBX) y llevarlos a una
+aplicación de realidad mixta OpenXR independiente del visor.
 
-### 🚀 Inicio Rápido
+### Inicio rápido
 
-La interfaz actual es **PySide6/Qt** y vive en `src/ui_qt`:
+La interfaz es **PySide6/Qt** y vive en `src/ui_qt`:
 
 ```bash
 cd /d D:\Tesis\NEUROHUB
@@ -20,13 +19,28 @@ D:\Tesis\.venv\Scripts\python.exe launcher.py doctor
 D:\Tesis\.venv\Scripts\python.exe launcher.py ui
 ```
 
-La integración Unity/MR está en [`unity/NeuroHubMR`](unity/NeuroHubMR). El
-proyecto contiene la escena, scripts, manifiestos y configuración XR; los FBX
-clínicos y la carpeta `Library/` se generan localmente y no se versionan.
+Al abrir, ATLAS muestra los cinco **casos ATLAS** de
+`salidas\modelos_ar_freesurfer` (cada uno con todas sus estructuras en el
+mismo sistema de coordenadas):
+
+- **Modelo 3D**: capas agrupadas (lesión, vasos, núcleos profundos,
+  ventrículos, cerebelo y tronco, sustancia blanca, corteza, cráneo) con
+  visibilidad y opacidad por grupo, transparencias ordenadas (*depth
+  peeling*), vistas anatómicas estándar, cubo de orientación y clic para
+  identificar una estructura y su volumen.
+- **Cortes 2D**: axial, coronal y sagital en convención radiológica (letras de
+  orientación en los bordes), lesión con sus clases (necrosis, edema, realce),
+  contornos anatómicos de SynthSeg con los colores del 3D y delineado manual
+  con pincel, borrador y deshacer.
+- **Estudio propio** y **Procesamiento**: carga de DICOM/NIfTI y el pipeline
+  completo (segmentación, FreeSurfer, flujo CTA, exportación FBX).
+
+La aplicación de realidad mixta está en [`unity/NeuroHubMR`](unity/NeuroHubMR)
+(producto «ATLAS MR»). Los FBX clínicos y la carpeta `Library/` se generan
+localmente y no se versionan.
 
 > **Interfaz legacy.** `main.py` (tkinter + pygame) se conserva como
-> referencia histórica y ya **no** es el punto de entrada. Sus dependencias
-> (`customtkinter`, `pygame`) son opcionales.
+> referencia histórica y ya **no** es el punto de entrada.
 
 ## 📦 Dependencias
 
@@ -57,7 +71,7 @@ la adquisición volumétrica principal).
 o un DICOM individual.
 
 El botón **FreeSurfer (aseg)** aparece en el mismo panel y procesa el estudio
-activo, incluyendo estudios DICOM que NEUROHUB pueda convertir a NIfTI. En
+activo, incluyendo estudios DICOM que ATLAS pueda convertir a NIfTI. En
 cada ejecución solicita el `license.txt`, crea un sujeto independiente bajo
 `salidas\freesurfer\subjects` y guarda `freesurfer_aseg.nii.gz` dentro de la
 carpeta `segmentaciones_ai` del estudio. FreeSurfer requiere una imagen
@@ -93,7 +107,7 @@ Docker no es necesario para el visor ni para el pipeline principal.
 
 ### FreeSurfer opcional
 
-NEUROHUB puede ejecutar FreeSurfer sin convertirlo en una dependencia de
+ATLAS puede ejecutar FreeSurfer sin convertirlo en una dependencia de
 Python. En Windows se recomienda instalarlo dentro de WSL, configurar
 `FREESURFER_WSL_DISTRO` si hay varias distribuciones y comprobar el entorno:
 
@@ -119,7 +133,7 @@ D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer mascara caso01 ^
 ```
 
 Para usar directamente la segmentación anatómica FreeSurfer dentro de
-NEUROHUB, `segmentar` ejecuta `recon-all` y exporta `aseg.mgz` como NIfTI en
+ATLAS, `segmentar` ejecuta `recon-all` y exporta `aseg.mgz` como NIfTI en
 `salidas\segmentaciones_ai`:
 
 ```bat
@@ -134,7 +148,31 @@ También se admite una instalación nativa si `recon-all` está en `PATH` o
 `FREESURFER_HOME` apunta a ella. FreeSurfer requiere su licencia propia; el
 proyecto no incluye ni descarga licencias.
 
-Al terminar `FreeSurfer (aseg)`, NEUROHUB reconstruye las estructuras ASEG
+### SynthSeg y TumorSynth
+
+El mismo puente permite ejecutar los modelos de FreeSurfer desde Windows
+(nativo o WSL). Comprueba que `mri_synthseg` y `mri_tumorsynth` estén
+disponibles después de cargar `SetUpFreeSurfer.sh`:
+
+```bat
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer synthseg ^
+  D:\Tesis\data\nifti\pacientes\caso.nii.gz ^
+  --salida D:\Tesis\salidas\segmentaciones_ai\synthseg.nii.gz ^
+  --licencia D:\Tesis\license.txt --robusto --parcellation --cpu
+
+D:\Tesis\.venv\Scripts\python.exe launcher.py freesurfer tumorsynth ^
+  D:\Tesis\data\nifti\pacientes\t1ce.nii.gz,t2.nii.gz,flair.nii.gz ^
+  --salida D:\Tesis\salidas\segmentaciones_ai\tumorsynth.nii.gz ^
+  --modo wholetumor --threads 4 --cpu
+```
+
+`TumorSynth` acepta una imagen o varias rutas NIfTI separadas por comas. Las
+secuencias múltiples deben estar registradas y tener el preprocesamiento
+requerido por el modelo. Para segmentar subestructuras tumorales se usa
+`--modo innertumor` con una entrada ROI preparada según la documentación de
+TumorSynth.
+
+Al terminar `FreeSurfer (aseg)`, ATLAS reconstruye las estructuras ASEG
 coloreables y las guarda sin sobrescribir ejecuciones anteriores en
 `salidas\mallas\<sujeto>\<ejecucion>`. El tumor solo se incorpora si su máscara
 ocupa el mismo espacio físico que el atlas FreeSurfer; si no, se conserva como
@@ -142,6 +180,52 @@ salida independiente y el informe explica que hace falta registrar la máscara
 al mismo estudio. Los informes detallados quedan en
 `salidas\informes\<sujeto>\<ejecucion>`, con Dice únicamente cuando existe una
 referencia independiente compatible.
+
+### Modelos AR translúcidos (5 casos, FreeSurfer + lesión)
+
+Cinco modelos para realidad mixta, cada uno con anatomía FreeSurfer y su
+lesión (tumor o aneurisma). Salidas en `salidas\modelos_ar_freesurfer\<caso>\`
+(`<caso>_AR.glb`, `<caso>_AR_ligero.glb`, `stl\`, `fbx\`, `resumen.json`,
+vista previa) y en Unity `Assets\Resources\Studies\<caso>[_ligero]\`.
+
+| Caso | Fuente | Cráneo | Anatomía | Lesión |
+|---|---|---|---|---|
+| `tumor_02` | HUSI RM 3D + TC | TC registrada a la RM | SynthSeg (T1) | Tumor frontal izquierdo: BraTS SegResNet sobre T1/T1-Gd/T2/FLAIR |
+| `aneurisma_05` | HUSI TC + angio-TC | TC | SynthSeg `--ct` | Aneurisma del sifón carotídeo derecho + arterias |
+| `brats_00000/00003/00006` | BraTS 2021 (público) | — (dataset sin cráneo) | SynthSeg (T1) | Tumor: segmentación de expertos |
+
+Estructuras: corteza por lóbulos y hemisferio (frontal, motora/precentral,
+parietal, temporal, occipital, cingulado, ínsula), sustancia blanca,
+ventrículos, tálamo, caudado, putamen, pálido, hipocampo, amígdala,
+accumbens, diencéfalo ventral, tronco, cerebelo, cráneo, arterias y lesión
+(tumor en capas anidadas: edema → realce → necrosis). Cada estructura lleva
+color y opacidad (glTF `alphaMode: BLEND`; en Unity, URP Lit transparente).
+Escala real en metros, origen en el centroide cerebral. Presupuesto: ~700 k
+triángulos (Quest 3/PC) y ~175 k en la versión ligera (HoloLens 2).
+
+Herramientas (`herramientas\`):
+
+| Paso | Script |
+|---|---|
+| Serie DICOM → NIfTI con corrección de gantry inclinado | `ar_dicom_serie.py` |
+| Tumor de paciente (registro + BraTS) | `ar_tumor_brats_paciente.py` |
+| Angio-TC con sustracción ósea | `ar_sustraccion_cta.py` |
+| Separación del saco aneurismático (apertura morfológica) | `ar_aneurisma.py` |
+| Cráneo desde TC (registro TC→RM por máscaras SynthSeg + IM) | `ar_craneo_ct.py` |
+| Mallas, GLB translúcido, STL, resumen | `modelos_ar_freesurfer.py` |
+| Láminas de control | `ar_vista_previa.py` |
+| Imagen, anatomía y lesión en una rejilla para el visor 2D | `ar_visor2d.py` |
+| FBX por estructura + manifiesto Unity + índice | `ar_unity.py` |
+
+Simulaciones en Unity (31/31 superadas, incluida la verificación de render URP): carga, escala real, gestos con
+manos simuladas, render estéreo a resolución de Quest 3 y sesión OpenXR con
+Mock Runtime en el reproductor. Detalle en
+[`unity/NeuroHubMR/SimulationResults/RESUMEN_SIMULACION.md`](unity/NeuroHubMR/SimulationResults/RESUMEN_SIMULACION.md).
+
+Notas: SynthSeg necesita `--crop 192` en WSL con 15 GB (si no, `bad_alloc`).
+Las TC con gantry inclinado deben convertirse con `ar_dicom_serie.py`; el
+lector estándar de ITK las deforma y el registro TC↔CTA falla. Los modelos
+son para entrenamiento preclínico y requieren revisión del especialista.
 
 ## 🖥️ Tecnologías
 
@@ -284,13 +368,13 @@ El pipeline genera **4 estructuras principales** a partir del volumen MRI:
 
 ## 🧠 Segmentación de Tumor (BRATS multimodal + respaldo)
 
-NEUROHUB usa el modelo **BRATS 2020 (SegResNet)** para la segmentación de
+ATLAS usa el modelo **BRATS 2020 (SegResNet)** para la segmentación de
 tumores con precisión clínica. El modelo requiere **4 modalidades MRI reales y
 alineadas** (T1, T1ce, T2, FLAIR) para distinguir las subregiones:
 NCR/NET (necrosis), ED (edema) y ET (tumor realzado).
 
 ### Auto-detección de pacientes BraTS
-Al cargar **cualquier archivo NIfTI**, NEUROHUB escanea su directorio en busca
+Al cargar **cualquier archivo NIfTI**, ATLAS escanea su directorio en busca
 de las modalidades hermanas con la convención BraTS (`*_t1`, `*_t1ce`, `*_t2`,
 `*_flair`). Si encuentra ≥3 reales, ejecuta BRATS completo automáticamente:
 
@@ -308,7 +392,7 @@ También se resolvió el clasificador CT/MRI: el rango de intensidad de BraTS
 ### Modalidad única (respaldo heurístico morfológico)
 Si el archivo es **un solo volumen** (como `MRBrainTumor1.nii.gz`) o es un CT:
 BRATS no puede alimentarse con 4 canales duplicados (el modelo destruiría el
-contraste). En ese caso NEUROHUB aplica el **método morfológico heurístico**
+contraste). En ese caso ATLAS aplica el **método morfológico heurístico**
 real (`generate_tumor_mask`): núcleo sólido (percentil 95) + histeresis de
 extensión (umbral permisivo con dilatación condicionada), produciendo una
 máscara `tumor_heur.nii.gz` con volumen reportado en cm³.
@@ -458,7 +542,7 @@ el flujo legacy y no se reutiliza al cambiar entre estudios en Qt.
 
 #### Reconstrucción de máxima resolución
 
-Cuando faltan máscaras anatómicas base, NEUROHUB puede delegar la conversión
+Cuando faltan máscaras anatómicas base, ATLAS puede delegar la conversión
 de los labelmaps del estudio activo a superficies cerradas en 3D Slicer
 (`src/slicer_reconstruct.py`). Las rutas se entregan por entorno al proceso de
 Slicer, por lo que un estudio nunca puede leer las máscaras de otro.
@@ -488,7 +572,7 @@ documentado en
 [`docs/FLUJO_NEURONAVEGACION_UNITY_AR.md`](../docs/FLUJO_NEURONAVEGACION_UNITY_AR.md).
 Incluye:
 
-- Diagrama Mermaid DICOM/NIfTI → NEUROHUB → Unity → dispositivo AR.
+- Diagrama Mermaid DICOM/NIfTI → ATLAS → Unity → dispositivo AR.
 - Paquete recomendado con FBX, STL, máscaras y `manifest.json`.
 - Controles de escala, orientación, registro, tracking y rendimiento.
 - Separación explícita entre funcionalidades implementadas y pasos que deben
@@ -507,7 +591,7 @@ python build_exe.py  # genera dist/NEUROHUB.exe (~434 MB)
 ## 🧪 Tests
 
 ```bash
-cd NEUROHUB
+cd ATLAS
 python -m pytest tests/ -q
 ```
 

@@ -1,4 +1,4 @@
-"""Prepara los artefactos de un estudio para la escena Unity MR de NEUROHUB."""
+"""Prepara los artefactos de un estudio para la escena Unity MR de ATLAS."""
 
 import argparse
 import json

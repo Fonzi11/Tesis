@@ -1,8 +1,8 @@
-# 📋 ÍNDICE - NEUROHUB v1.1 (ULTRADETALLE + 2D/3D INTEGRADO)
+# 📋 ÍNDICE - ATLAS v1.1 (ULTRADETALLE + 2D/3D INTEGRADO)
 
 ## ✅ IMPLEMENTACIÓN COMPLETADA
 
-Tu proyecto NEUROHUB ha sido mejorado exitosamente con:
+Tu proyecto ATLAS ha sido mejorado exitosamente con:
 - **Renderizado 3D de ULTRADETALLE** (iluminación profesional, SpecularPower 64)
 - **Renderizado 2D de ULTRADETALLE** (1024px, 3x supersampling, contraste optimizado)
 - **Visualización integrada 2D+3D** (layout 70/30 lado a lado)
@@ -13,13 +13,13 @@ Tu proyecto NEUROHUB ha sido mejorado exitosamente con:
 ## 📚 DOCUMENTACIÓN GENERADA
 
 ### 0. **FLUJO_NEURONAVEGACION_UNITY_AR.md** ⭐
-   - Diagrama de flujo DICOM/NIfTI → NEUROHUB → Unity → gafas AR
+   - Diagrama de flujo DICOM/NIfTI → ATLAS → Unity → gafas AR
    - Puntos de validación espacial, calidad, rendimiento y seguridad
    - Estructura recomendada del paquete de modelos para Unity
 
 ### 1. **RESUMEN_EJECUTIVO.txt** ⭐ LÉEME PRIMERO
    - Resumen ejecutivo de todos los cambios
-   - Cómo usar NEUROHUB inmediatamente
+   - Cómo usar ATLAS inmediatamente
    - Parámetros ajustables
    - Estado de verificaciones
 
@@ -75,7 +75,7 @@ Tu proyecto NEUROHUB ha sido mejorado exitosamente con:
 ## 🚀 CÓMO USAR INMEDIATAMENTE
 
 ```bash
-# 1. Abre terminal en la carpeta NEUROHUB
+# 1. Abre terminal en la carpeta ATLAS
 cd d:\Tesis\NEUROHUB
 
 # 2. Ejecuta la aplicación
@@ -208,7 +208,7 @@ Ver resultado completo: `python verificar_instalacion.py`
 
 ## 🎉 ¡LISTO!
 
-Tu proyecto NEUROHUB v1.1 está completamente implementado y validado.
+Tu proyecto ATLAS v1.1 está completamente implementado y validado.
 
 **Próximo paso:** Ejecuta `python main.py` en `d:\Tesis\NEUROHUB` y prueba con datos reales.
 

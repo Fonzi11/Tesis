@@ -57,6 +57,72 @@ HISTORIAL_MAX = 64       # pasos de deshacer
 # pintar no se repita el render del corte visible, no para prefetch.
 CACHE_BASE_MAX = 6
 
+# Orientacion interna del visor (ver `Volumen2D.cargar`).
+ORIENTACION_VISOR = "LPI"
+
+# Clases de lesion (convencion BraTS) con los colores de las capas 3D.
+COLOR_CLASE_LESION = {
+    1: (255, 217, 26),    # necrosis: amarillo
+    2: (77, 230, 242),    # edema: turquesa
+    4: (255, 38, 64),     # realce: rojo
+}
+ALPHA_CLASE = {1: 0.55, 2: 0.22, 4: 0.45}
+
+# Contornos anatomicos: mismos colores que las mallas 3D de los casos ATLAS.
+_LOBULOS_DK = {
+    (92, 158, 242): [3, 12, 14, 17, 18, 19, 20, 27, 28, 32],   # frontal
+    (250, 204, 51): [24],                                        # motora
+    (102, 217, 140): [8, 22, 25, 29, 31],                        # parietal
+    (250, 148, 77): [1, 6, 7, 9, 15, 16, 30, 33, 34],            # temporal
+    (184, 133, 242): [5, 11, 13, 21],                            # occipital
+    (242, 115, 179): [2, 10, 23, 26],                            # cingulado
+    (89, 217, 217): [35],                                        # insula
+}
+_SUBCORTICAL = {
+    (64, 140, 255): [4, 5, 14, 15, 43, 44],      # ventriculos
+    (51, 204, 77): [10, 49],                     # talamo
+    (140, 217, 255): [11, 50],                   # caudado
+    (242, 140, 191): [12, 51],                   # putamen
+    (77, 102, 242): [13, 52],                    # palido
+    (255, 217, 77): [17, 53],                    # hipocampo
+    (102, 242, 230): [18, 54],                   # amigdala
+    (255, 166, 51): [26, 58],                    # accumbens
+    (166, 102, 64): [28, 60],                    # diencefalo ventral
+    (140, 191, 89): [16],                        # tronco
+    (235, 191, 115): [7, 8, 46, 47],             # cerebelo
+    (150, 160, 170): [3, 42],                    # corteza sin parcelar
+    (220, 30, 35): [900],                        # arterias (angio-TC)
+}
+
+
+def _lut_anatomia():
+    """(grupo, color): etiqueta -> grupo anatomico y grupo -> color.
+
+    Las parcelas de Desikan-Killiany se agrupan por lobulo y hemisferio: el
+    contorno marca las fronteras entre lobulos y estructuras, no cada giro,
+    que sobre una RM convertia la imagen en una maraña de lineas.
+    """
+    grupo = np.zeros(4096, dtype=np.int32)
+    colores = [(0, 0, 0)]
+    for color, idx in list(_LOBULOS_DK.items()):
+        for base in (1000, 2000):
+            colores.append(color)
+            for i in idx:
+                grupo[base + i] = len(colores) - 1
+    for color, idx in _SUBCORTICAL.items():
+        colores.append(color)
+        for i in idx:
+            grupo[i] = len(colores) - 1
+    # Sustancia blanca y LCR: grupos sin color (cuentan como frontera).
+    for i in (2, 41, 24):
+        colores.append((0, 0, 0))
+        grupo[i] = len(colores) - 1
+    return grupo, np.array(colores, dtype=np.uint8)
+
+
+LUT_GRUPO_ANATOMIA, COLORES_GRUPO_ANATOMIA = _lut_anatomia()
+LUT_ANATOMIA = COLORES_GRUPO_ANATOMIA[LUT_GRUPO_ANATOMIA]
+
 
 def eje_indice(eje):
     """Normaliza 'axial'/'coronal'/'sagital' o 0/1/2 al indice del array."""
@@ -93,6 +159,12 @@ class Volumen2D:
         self.modalidad = (str(modalidad).strip().upper()
                           if modalidad else None)
         self.mascara_modificada = False
+        self.etiquetas = None          # uint16 (z, y, x) o None
+        self.etiquetas_path = None
+        self.clases_lesion = None      # uint8 (z, y, x) con las clases BraTS
+        self.color_lesion = COLOR_TUMOR_RGB
+        self._cache_etiquetas = {}
+        self._orientacion_original = None
         self._imagen_ref = None        # imagen SimpleITK del volumen
         self._lo, self._hi = 0.0, 1.0
         self._historial = []           # [(sectores, antes, despues)] LIFO
@@ -135,14 +207,33 @@ class Volumen2D:
     # CARGA
     # ==================================================================
     def cargar(self, volumen_path, mascara_path=None):
-        """Lee el volumen (y la mascara opcional) de disco."""
+        """Lee el volumen (y la mascara opcional) de disco.
+
+        El volumen se reorienta a LPI (eje x hacia la izquierda del paciente,
+        y hacia posterior, z hacia inferior). Con esa orientacion el array
+        (z, y, x) se lee directamente en convencion radiologica en los tres
+        planos: axial con anterior arriba y la derecha del paciente a la
+        izquierda de la pantalla, coronal y sagital con superior arriba.
+        Sin reorientar, una RM adquirida en sagital (orientacion PIR, como la
+        3D T1 del HUSI) aparecia como "axial", y coronal y sagital salian
+        cabeza abajo. Al guardar, la mascara vuelve a la orientacion original.
+        """
         import SimpleITK as sitk
 
         self.volumen_path = volumen_path
         img = sitk.ReadImage(volumen_path)
+        if img.GetNumberOfComponentsPerPixel() > 1:
+            img = sitk.VectorIndexSelectionCast(img, 0)
+        self._orientacion_original = (
+            sitk.DICOMOrientImageFilter.GetOrientationFromDirectionCosines(
+                img.GetDirection()))
+        img = sitk.DICOMOrient(img, ORIENTACION_VISOR)
         self.volumen = sitk.GetArrayFromImage(img).astype(np.float32)
         self.spacing = tuple(float(v) for v in img.GetSpacing())
         self._imagen_ref = img
+        self.etiquetas = None
+        self.etiquetas_path = None
+        self.clases_lesion = None
         self.modalidad = self._inferir_modalidad(volumen_path, self.volumen)
 
         self.mascara = np.zeros(self.volumen.shape, dtype=np.uint8)
@@ -177,19 +268,43 @@ class Volumen2D:
         daria un tumor desplazado, que en una presentacion clinica es peor que
         no dibujar tumor. Se falla de forma visible en lugar de adivinar.
         """
-        import SimpleITK as sitk
-
-        img = sitk.ReadImage(mascara_path)
-        arr = (sitk.GetArrayFromImage(img) > 0).astype(np.uint8)
-        if arr.shape != self.volumen.shape:
-            raise ValueError(
-                f"La mascara {os.path.basename(mascara_path)} tiene {arr.shape} "
-                f"y el volumen {self.volumen.shape}. Deben compartir rejilla: "
-                "reejecute el pipeline o alinee la mascara antes.")
+        crudo = self._leer_en_rejilla(mascara_path, "La mascara")
+        arr = (crudo > 0).astype(np.uint8)
+        # Si la mascara trae varias clases (BraTS: 1 necrosis, 2 edema,
+        # 4 realce) se guardan aparte para pintarlas con su color; la mascara
+        # editable sigue siendo binaria.
+        valores = np.unique(crudo[crudo > 0]) if arr.any() else []
+        self.clases_lesion = (crudo.astype(np.uint8) if len(valores) > 1 else None)
         self.mascara = arr
         self.mascara_path = mascara_path
         self.mascara_modificada = False
         self._historial.clear()
+        return self
+
+    def _leer_en_rejilla(self, ruta, que="La imagen"):
+        """Lee `ruta` en la orientacion del visor y exige la rejilla del volumen."""
+        import SimpleITK as sitk
+
+        img = sitk.ReadImage(ruta)
+        if self._imagen_ref is not None:
+            img = sitk.DICOMOrient(img, ORIENTACION_VISOR)
+        arr = sitk.GetArrayFromImage(img)
+        if arr.shape != self.volumen.shape:
+            raise ValueError(
+                f"{que} {os.path.basename(ruta)} tiene {arr.shape} "
+                f"y el volumen {self.volumen.shape}. Deben compartir rejilla: "
+                "reejecute el pipeline o alinee la mascara antes.")
+        return arr
+
+    def cargar_etiquetas(self, ruta):
+        """Carga un mapa de etiquetas anatomicas (SynthSeg/aseg) de solo lectura.
+
+        Se dibuja como contornos de color sobre la imagen; no se mezcla con la
+        mascara editable de la lesion.
+        """
+        self.etiquetas = self._leer_en_rejilla(ruta, "El mapa de etiquetas").astype(np.uint16)
+        self.etiquetas_path = ruta
+        self._cache_etiquetas = {}
         return self
 # ==================================================================
     # WINDOWING Y REALCE
@@ -221,7 +336,11 @@ class Volumen2D:
             if no_cero.size >= 0.3 * validos.size and no_cero.size > 256:
                 validos = no_cero
 
-        if self.modalidad == "CT":
+        if self.modalidad == "CTA":
+            # Ventana vascular (WL 200 / WW 500): el contraste arterial
+            # (250-500 HU) queda brillante sin que el hueso sature la imagen.
+            lo, hi = -50.0, 450.0
+        elif self.modalidad == "CT":
             # Ventana cerebral de tejidos blandos (WL 40 / WW 120). Evita que
             # el hueso domine la imagen como una radiografia y permite leer
             # parenquima, edema y contraste intracraneal.
@@ -304,7 +423,8 @@ class Volumen2D:
     # RENDER DE UN CORTE
     # ==================================================================
     def render_corte(self, eje, indice, alto=512, clahe=True, unsharp=True,
-                     gamma=None, overlay=True, grosor_borde=GROSOR_BORDE):
+                     gamma=None, overlay=True, grosor_borde=GROSOR_BORDE,
+                     anatomia=False):
         """Devuelve `(rgb_uint8, info)` del corte con el tumor encima.
 
         El resultado ya tiene el aspecto fisico corregido por el espaciado y
@@ -316,16 +436,26 @@ class Volumen2D:
         """
         e = eje_indice(eje)
         if gamma is None:
-            gamma = 0.95 if self.modalidad == "CT" else 1.25
+            gamma = 0.95 if self.modalidad in ("CT", "CTA") else 1.25
         mask = self.corte_mascara(e, indice) if overlay else None
         rgb = self._render_base(e, indice, alto, clahe, unsharp, gamma)
+        alto_px, ancho_px = rgb.shape[:2]
+        mask_px = None
         if mask is not None and mask.any():
             # `rgb` viene de la cache con forma (h, w, 3) y `_reescalar` pide
             # (w, h): hay que desempaquetar en ese orden, no pasar el shape.
-            alto_px, ancho_px = rgb.shape[:2]
-            mask = self._reescalar(mask.astype(np.uint8), ancho_px, alto_px,
-                                   orden=0) > 0
-            rgb = self._superponer(rgb, mask, grosor_borde)
+            mask_px = self._reescalar(mask.astype(np.uint8), ancho_px, alto_px,
+                                      orden=0) > 0
+        if anatomia and self.etiquetas is not None:
+            # Dentro de la lesion los contornos anatomicos solo estorban.
+            rgb = self._superponer_contornos(rgb, e, indice, excluir=mask_px)
+        if mask_px is not None:
+            mask = mask_px
+            clases = None
+            if self.clases_lesion is not None:
+                c = np.take(self.clases_lesion, self._acotar(e, indice), axis=e)
+                clases = self._reescalar(c, ancho_px, alto_px, orden=0).astype(np.uint8)
+            rgb = self._superponer(rgb, mask, grosor_borde, clases=clases)
 
         info = {
             "eje": eje if isinstance(eje, str) else NOMBRES_EJE[e].lower(),
@@ -377,6 +507,7 @@ class Volumen2D:
     def invalidar_cache(self):
         """Vacia la cache de la capa base (tras cambiar volumen o ventana)."""
         self._cache_base.clear()
+        self._cache_etiquetas = {}
 
     def _tamano_objetivo(self, e, alto):
         """(ancho, alto) en pixeles respetando el aspecto fisico del corte."""
@@ -433,7 +564,47 @@ class Volumen2D:
         """Alias de `px_por_voxel` con nombre explicito para el cursor."""
         return self.px_por_voxel(eje, alto)
 
-    def _superponer(self, rgb, mask, grosor_borde=GROSOR_BORDE):
+    def _superponer_contornos(self, rgb, e, indice, excluir=None):
+        """Dibuja los bordes de las etiquetas anatomicas con su color.
+
+        Cada borde se marca a los dos lados (un pixel por etiqueta), de modo
+        que la frontera entre dos estructuras muestra los dos colores y una
+        estructura junto a sustancia blanca (sin color) sigue teniendo trazo.
+        """
+        alto_px, ancho_px = rgb.shape[:2]
+        clave = (e, self._acotar(e, indice), ancho_px, alto_px)
+        cache = self._cache_etiquetas.get(clave)
+        if cache is None:
+            lab = np.take(self.etiquetas, self._acotar(e, indice), axis=e)
+            lab = self._reescalar(lab.astype(np.float32), ancho_px, alto_px,
+                                  orden=0).astype(np.int32)
+            lab = LUT_GRUPO_ANATOMIA[np.clip(lab, 0, LUT_GRUPO_ANATOMIA.shape[0] - 1)]
+            borde = np.zeros(lab.shape, dtype=bool)
+            dx = lab[:, 1:] != lab[:, :-1]
+            dy = lab[1:, :] != lab[:-1, :]
+            borde[:, 1:] |= dx
+            borde[:, :-1] |= dx
+            borde[1:, :] |= dy
+            borde[:-1, :] |= dy
+            colores = COLORES_GRUPO_ANATOMIA[lab]
+            borde &= colores.any(axis=-1)
+            idx = np.flatnonzero(borde.ravel())
+            cache = (idx, colores.reshape(-1, 3)[idx].astype(np.float32))
+            if len(self._cache_etiquetas) > CACHE_BASE_MAX:
+                self._cache_etiquetas.clear()
+            self._cache_etiquetas[clave] = cache
+        idx, col = cache
+        if excluir is not None and idx.size:
+            fuera = ~excluir.ravel()[idx]
+            idx, col = idx[fuera], col[fuera]
+        if idx.size == 0:
+            return rgb
+        rgb = np.array(rgb, dtype=np.float32, copy=True)
+        canales = rgb.reshape(-1, 3)
+        canales[idx] = canales[idx] * 0.35 + col * 0.65
+        return rgb
+
+    def _superponer(self, rgb, mask, grosor_borde=GROSOR_BORDE, clases=None):
         """Mezcla el overlay: relleno translucido dentro, borde opaco.
 
         El alfa es 0 FUERA de la mascara. Esto parece obvio pero es el error
@@ -454,7 +625,8 @@ class Volumen2D:
         # podria borrar). Se copia solo la imagen, que es una sola operacion
         # de memoria, no un bucle por pixel.
         rgb = np.array(rgb, dtype=np.float32, copy=True)
-        color = np.asarray(COLOR_TUMOR_RGB, dtype=np.float32)
+        color = np.asarray(self.color_lesion if self.color_lesion is not None
+                           else COLOR_TUMOR_RGB, dtype=np.float32)
         # El borde se calcula ya a resolucion de render (no en vóxeles): es
         # donde el usuario ve el contorno, y asi el trazo del pincel se ve con
         # un grosor constante sea cual sea el eje.
@@ -474,7 +646,30 @@ class Volumen2D:
             return rgb
         canales = rgb.reshape(-1, rgb.shape[-1])
         a = alfa.ravel()[idx].astype(np.float32)[:, None]
-        canales[idx] = canales[idx] * (1.0 - a) + color * a
+        if clases is None:
+            canales[idx] = canales[idx] * (1.0 - a) + color * a
+            return rgb
+        # Clases BraTS: cada clase con su color y su opacidad. Lo pintado a
+        # mano sin clase conserva el color de la lesion. El borde exterior de
+        # la lesion se mantiene opaco para leer su extension total.
+        cl = clases.ravel()[idx]
+        cols = np.tile(color, (idx.size, 1))
+        alfas = a[:, 0].copy()
+        for valor, c in COLOR_CLASE_LESION.items():
+            sel = cl == valor
+            if sel.any():
+                cols[sel] = c
+                alfas[sel] = np.where(borde.ravel()[idx][sel], 0.95,
+                                      ALPHA_CLASE.get(valor, ALPHA_RELLENO))
+        # Bordes internos entre clases (realce/necrosis dentro del edema).
+        interno = np.zeros(clases.shape, dtype=bool)
+        dx = clases[:, 1:] != clases[:, :-1]
+        dy = clases[1:, :] != clases[:-1, :]
+        interno[:, 1:] |= dx
+        interno[1:, :] |= dy
+        en_borde = interno.ravel()[idx] & (cl != 2) & (cl > 0)
+        alfas[en_borde] = 0.95
+        canales[idx] = canales[idx] * (1.0 - alfas[:, None]) + cols * alfas[:, None]
         return rgb
 
     @staticmethod
@@ -758,6 +953,10 @@ class Volumen2D:
             img = sitk.GetImageFromArray(self.mascara.astype(np.uint8))
             if self._imagen_ref is not None:
                 img.CopyInformation(self._imagen_ref)
+                # Vuelve a la orientacion del NIfTI de origen: la mascara se
+                # escribe en la misma rejilla que el usuario cargo.
+                if self._orientacion_original:
+                    img = sitk.DICOMOrient(img, self._orientacion_original)
             else:
                 # Sin imagen de referencia se invierte el spacing, porque el
                 # array es (z, y, x) y SimpleITK lo describe como (x, y, z).

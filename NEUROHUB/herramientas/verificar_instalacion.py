@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de verificación rápida del estado de NEUROHUB v1.1
+Script de verificación rápida del estado de ATLAS v1.1
 Verifica sintaxis, archivos, y estructura del proyecto
 """
 
@@ -33,7 +33,7 @@ def check_syntax(filepath):
         return False
 
 print("\n" + "="*80)
-print("✅ VERIFICACIÓN DE NEUROHUB v1.1")
+print("✅ VERIFICACIÓN DE ATLAS v1.1")
 print("="*80)
 
 base_path = Path("d:\\Tesis")
@@ -129,7 +129,7 @@ print("="*80)
 
 if all_exist and all_valid:
     print("\n✅ TODAS LAS VERIFICACIONES PASARON")
-    print("\n Puedes ejecutar NEUROHUB con:")
+    print("\n Puedes ejecutar ATLAS con:")
     print("   $ cd d:\\Tesis\\NEUROHUB")
     print("   $ python main.py")
 else:

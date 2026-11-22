@@ -1,12 +1,12 @@
-# 🧠 NEUROHUB — Proyecto Tesis
+# ATLAS — Augmented Technologies Laboratory for Advanced Surgery
 
-Segmentación y modelado 3D de neuroimágenes para diagnóstico asistido por IA.
+Proyecto de grado PG263004 (Pontificia Universidad Javeriana, Hospital
+Universitario San Ignacio): modelos 3D neuroquirúrgicos segmentados con
+FreeSurfer y una aplicación de realidad mixta OpenXR independiente del visor.
 
-> **Proyecto unificado.** Antes existían dos carpetas paralelas (`ATLAS/` y
-> `NEUROHUB/`) que se pisaban: dos interfaces, dos visores 3D y dos lanzadores
-> para el mismo trabajo. Ahora todo vive en **`NEUROHUB/`**. La carpeta `ATLAS/`
-> se eliminó; su interfaz avanzada (visor VTK con capas, opacidad y
-> supersampling) y sus módulos de pipeline se integraron aquí.
+> El código vive en la carpeta `NEUROHUB/`, que conserva su nombre histórico
+> para no romper rutas; la aplicación de escritorio y la de realidad mixta se
+> llaman **ATLAS** y **ATLAS MR**.
 
 ## 📦 Contenido
 
@@ -28,7 +28,7 @@ Segmentación y modelado 3D de neuroimágenes para diagnóstico asistido por IA.
 
 ## 🧠 FreeSurfer + Mixed Reality
 
-NEUROHUB integra FreeSurfer 7.4.1 mediante WSL (`Ubuntu-22.04`) para procesar
+ATLAS integra FreeSurfer 7.4.1 mediante WSL (`Ubuntu-22.04`) para procesar
 estudios T1 y exportar el atlas `aseg` a estructuras 3D coloreables:
 
 - Corteza, sustancia blanca, cerebelo, tronco cerebral, tálamo, ganglios
@@ -211,7 +211,7 @@ completo, no para el visor ni la interfaz. Las de la interfaz legacy
 ## 🧪 Tests
 
 ```bash
-cd NEUROHUB
+cd ATLAS
 python -m pytest tests/ -q
 ```
 

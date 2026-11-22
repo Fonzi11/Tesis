@@ -172,8 +172,8 @@ def _write_seg(
         ),
         algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
         algorithm_identification=AlgorithmIdentificationSequence(
-            name="NEUROHUB CTA threshold",
-            family=Code("99NEUROHUB", "99LOCAL", "NEUROHUB"),
+            name="ATLAS CTA threshold",
+            family=Code("99ATLAS", "99LOCAL", "ATLAS"),
             version="1",
         ),
     )
@@ -186,10 +186,10 @@ def _write_seg(
         series_number=901,
         sop_instance_uid=generate_uid(),
         instance_number=1,
-        manufacturer="NEUROHUB",
-        manufacturer_model_name="NEUROHUB clinical-assist",
+        manufacturer="ATLAS",
+        manufacturer_model_name="ATLAS clinical-assist",
         software_versions="1",
-        device_serial_number="NEUROHUB",
+        device_serial_number="ATLAS",
     )
     seg.save_as(output_path)
     report["dicom_seg"] = {

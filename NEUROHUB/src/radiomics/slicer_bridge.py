@@ -2,7 +2,7 @@
 Puente con 3D Slicer para reconstruir mallas y medir sobre ellas.
 
 3D Slicer ya esta instalado en esta maquina (D:/APPS/3D Slicer 5.12.3) y es
-la herramienta que usa el propio pipeline de NEUROHUB en
+la herramienta que usa el propio pipeline de ATLAS en
 `segmentacion_completa.generar_mallas_3d`. Este modulo completa esa
 integración con la parte que faltaba: 
 
@@ -17,7 +17,7 @@ integración con la parte que faltaba:
     `raidionics_bridge`), que es el otro motor posible.
 
 Todo se llama por proceso externo: Slicer corre en su propio intérprete de
-Python (3.12) y no puede compartir objetos con el intérprete de NEUROHUB
+Python (3.12) y no puede compartir objetos con el intérprete de ATLAS
 (3.13), así que la comunicación es por archivos NIfTI/STL en disco.
 """
 

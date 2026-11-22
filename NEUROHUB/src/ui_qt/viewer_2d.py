@@ -39,15 +39,24 @@ from PySide6.QtWidgets import (
 )
 
 from .software_config import (
-    COLOR_BG, COLOR_TEXTO, COLOR_TEXTO_SEC, COLOR_PANEL, COLOR_PANEL_ALT,
-    COLOR_BORDE,
+    COLOR_BG, COLOR_TEXTO, COLOR_TEXTO_SEC, COLOR_TEXTO_TENUE, COLOR_PANEL,
+    COLOR_PANEL_ALT, COLOR_BORDE, COLOR_BORDE_SUAVE, COLOR_ACENTO, rgba,
 )
+
+# Letras de orientacion en los bordes de cada plano (convencion radiologica,
+# ver `volumen_2d.ORIENTACION_VISOR`): (arriba, abajo, izquierda, derecha).
+LETRAS_PLANO = {
+    "axial": ("A", "P", "D", "Iz"),
+    "coronal": ("S", "Inf", "D", "Iz"),
+    "sagital": ("S", "Inf", "A", "P"),
+}
 
 # Color del pincel: el MISMO verde del overlay. Si el cursor y la mascara
 # tuvieran colores distintos, no se podria ver si lo que se esta pintando es
 # exactamente lo que quedara guardado.
 COLOR_PINCEL = "#00E66E"
 COLOR_PINCEL_BORRADO = "#FF5C5C"
+COLOR_WARN_2D = "#E3A63B"
 
 # Desplazamiento minimo (en pixeles de touchpad) que cuenta como UNA tiqueta de
 # rueda. Por debajo se ignora, para que el temblor del dedo al hacer scroll no
@@ -101,6 +110,8 @@ class Viewer2D(QWidget):
         self._eje_pintando = None
         self._delineado_con_lapiz = False
         self._overlay_visible = True
+        self._anatomia_visible = True
+        self._titulo = ""
         self._bloqueando_slider = False
         # El slider puede emitir decenas de valores durante un arrastre.
         # Solo se procesa el ultimo valor pendiente cada tick de pantalla.
@@ -116,16 +127,22 @@ class Viewer2D(QWidget):
     def _barra_herramientas(self):
         """Herramientas de delineado. Se ocultan si no hay volumen cargado."""
         self._barra_brush = QHBoxLayout()
+        self._barra_brush.setContentsMargins(10, 6, 10, 6)
         self._barra_brush.setSpacing(6)
+        etiqueta = QLabel("EDICIÓN")
+        etiqueta.setStyleSheet(f"color: {COLOR_TEXTO_TENUE}; font-size: 10px;"
+                               " font-weight: 700; letter-spacing: 1.2px;")
+        self._barra_brush.addWidget(etiqueta)
+        self._barra_brush.addSpacing(4)
 
         self._grp_brush = QButtonGroup(self)
         self._grp_brush.setExclusive(True)
         self._botones_brush = {}
         for clave, texto, tip, color in (
-                ("navegar", "  Mano  ", "Zoom (Ctrl+rueda) y arrastre (botón derecho)", COLOR_TEXTO),
-                ("pintar", "  Pincel  ", "Pintar tumor con el botón izquierdo  ·  B",
+                ("navegar", "Navegar", "Rueda: corte  ·  Ctrl+rueda: zoom  ·  botón derecho: desplazar  ·  Esc", COLOR_TEXTO),
+                ("pintar", "Pincel", "Pintar lesión con el botón izquierdo  ·  B",
                  COLOR_PINCEL),
-                ("borrar", "  Borrar  ", "Borrar tumor con el botón izquierdo  ·  E",
+                ("borrar", "Borrador", "Borrar lesión con el botón izquierdo  ·  E",
                  COLOR_PINCEL_BORRADO)):
             b = QPushButton(texto)
             b.setCheckable(True)
@@ -138,8 +155,10 @@ class Viewer2D(QWidget):
             self._botones_brush[clave] = b
             self._barra_brush.addWidget(b)
 
-        self._barra_brush.addSpacing(10)
-        self._barra_brush.addWidget(QLabel("Pincel:"))
+        self._barra_brush.addSpacing(8)
+        lbl_radio = QLabel("Radio")
+        lbl_radio.setStyleSheet(f"color: {COLOR_TEXTO_SEC}; font-size: 11px;")
+        self._barra_brush.addWidget(lbl_radio)
         self._cmb_radio = QComboBox()
         for r in self.RADIOS_VOXEL:
             self._cmb_radio.addItem(f"{r} vox", r)
@@ -150,11 +169,13 @@ class Viewer2D(QWidget):
         self._barra_brush.addWidget(self._cmb_radio)
 
         self._btn_undo = QPushButton("Deshacer")
+        self._btn_undo.setObjectName("fantasma")
         self._btn_undo.clicked.connect(self.deshacer)
         self._btn_undo.setToolTip("Revierte la ultima pintada (Ctrl+Z)")
         self._barra_brush.addWidget(self._btn_undo)
 
-        self._btn_limpiar = QPushButton("Limpiar tumor")
+        self._btn_limpiar = QPushButton("Vaciar")
+        self._btn_limpiar.setObjectName("fantasma")
         self._btn_limpiar.clicked.connect(self.limpiar)
         self._btn_limpiar.setToolTip(
             "Borra toda la mascara actual (se puede deshacer)")
@@ -166,25 +187,29 @@ class Viewer2D(QWidget):
         # cortes por los que hacer scroll ni mascara que "Limpiar tumor" pueda
         # vaciar. Sin este boton esos dos controles quedan deshabilitados sin
         # explicacion visible.
-        self._btn_cargar_volumen = QPushButton("Cargar volumen…")
+        self._btn_cargar_volumen = QPushButton("Abrir imagen…")
+        self._btn_cargar_volumen.setObjectName("fantasma")
         self._btn_cargar_volumen.setToolTip(
             "Abre una imagen NIfTI para navegar sus cortes y delinear el tumor")
         self._btn_cargar_volumen.clicked.connect(self.cargar_volumen)
         self._barra_brush.addWidget(self._btn_cargar_volumen)
 
-        self._btn_cargar_mascara = QPushButton("Cargar máscara")
+        self._btn_cargar_mascara = QPushButton("Abrir máscara…")
+        self._btn_cargar_mascara.setObjectName("fantasma")
         self._btn_cargar_mascara.setToolTip(
             "Carga una mascara NIfTI delineada (debe compartir la rejilla)")
         self._btn_cargar_mascara.clicked.connect(self.cargar_mascara)
         self._barra_brush.addWidget(self._btn_cargar_mascara)
 
         self._btn_guardar_mascara = QPushButton("Guardar máscara")
+        self._btn_guardar_mascara.setObjectName("fantasma")
         self._btn_guardar_mascara.setToolTip(
             "Guarda la mascara delineada como NIfTI en la rejilla del volumen")
         self._btn_guardar_mascara.clicked.connect(self.guardar_mascara)
         self._barra_brush.addWidget(self._btn_guardar_mascara)
 
-        self._btn_3d = QPushButton("Segmentar y crear 3D")
+        self._btn_3d = QPushButton("Crear modelo 3D")
+        self._btn_3d.setObjectName("primario")
         self._btn_3d.setToolTip(
             "Usa el contorno pintado como máscara, la guarda en la rejilla "
             "del estudio y crea el modelo 3D de alta calidad")
@@ -195,30 +220,32 @@ class Viewer2D(QWidget):
         self._barra_brush_widget.setLayout(self._barra_brush)
         self._barra_brush_widget.setObjectName("barraDelineado")
         self._barra_brush_widget.setStyleSheet(
-            f"#barraDelineado {{ background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDE};"
-            " border-radius: 10px; }")
+            f"#barraDelineado {{ background: {COLOR_PANEL};"
+            f" border-top: 1px solid {COLOR_BORDE_SUAVE}; }}")
         return self._barra_brush_widget
 
     @staticmethod
     def _qss_boton(color, activo):
         """QSS del boton de herramienta: el activo se marca con su color."""
         if activo:
-            return (f"QPushButton {{ color: {color}; background: {COLOR_PANEL_ALT};"
-                    f" border: 1px solid {color}; border-radius: 4px;"
-                    " padding: 4px 12px; font-weight: bold; }"
-                    f"QPushButton:hover {{ background: {COLOR_PANEL_ALT}; }}")
-        return (f"QPushButton {{ color: {COLOR_TEXTO}; background: {COLOR_PANEL_ALT};"
-                f" border: 1px solid {COLOR_BORDE}; border-radius: 4px;"
+            return (f"QPushButton {{ color: {color}; background: {rgba(color, 30)};"
+                    f" border: 1px solid {rgba(color, 150)}; border-radius: 6px;"
+                    " padding: 4px 12px; font-weight: 600; }")
+        return (f"QPushButton {{ color: {COLOR_TEXTO_SEC}; background: transparent;"
+                f" border: 1px solid {COLOR_BORDE}; border-radius: 6px;"
                 " padding: 4px 12px; }"
-                f"QPushButton:hover {{ border-color: {color}; }}")
+                f"QPushButton:hover {{ color: {COLOR_TEXTO}; border-color: {rgba(color, 150)}; }}"
+                f"QPushButton:disabled {{ color: {COLOR_TEXTO_TENUE}; border-color: {COLOR_BORDE_SUAVE}; }}")
 
     # ------------------------------------------------------------------
     def _barra_navegacion(self):
         """Deslizador de corte + etiqueta de estado."""
         barra = QHBoxLayout()
+        barra.setContentsMargins(12, 6, 12, 8)
         barra.setSpacing(8)
 
         self._btn_prev = QPushButton("◀")
+        self._btn_prev.setObjectName("fantasma")
         self._btn_prev.setFixedWidth(34)
         self._btn_prev.setToolTip("Corte anterior")
         self._btn_prev.clicked.connect(lambda: self.avanzar(-1))
@@ -231,25 +258,30 @@ class Viewer2D(QWidget):
         barra.addWidget(self._slider, 1)
 
         self._btn_next = QPushButton("▶")
+        self._btn_next.setObjectName("fantasma")
         self._btn_next.setFixedWidth(34)
         self._btn_next.setToolTip("Corte siguiente")
         self._btn_next.clicked.connect(lambda: self.avanzar(1))
         barra.addWidget(self._btn_next)
 
         self._lbl_corte = QLabel("-")
-        self._lbl_corte.setMinimumWidth(190)
-        self._lbl_corte.setStyleSheet(f"color: {COLOR_TEXTO}; font-size: 11px;")
+        self._lbl_corte.setMinimumWidth(230)
+        self._lbl_corte.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._lbl_corte.setStyleSheet(f"color: {COLOR_TEXTO_SEC}; font-size: 11px;")
         barra.addWidget(self._lbl_corte)
         return barra
 
     def _construir_ui(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 10, 10, 10)
-        lay.setSpacing(8)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
 
-        lay.addLayout(self._barra_ejes())
-        lay.addWidget(self._barra_herramientas())
-        lay.addLayout(self._barra_navegacion())
+        cab = QWidget()
+        cab.setObjectName("barraPlanos")
+        cab.setStyleSheet(f"#barraPlanos {{ background: {COLOR_PANEL};"
+                          f" border-bottom: 1px solid {COLOR_BORDE_SUAVE}; }}")
+        cab.setLayout(self._barra_ejes())
+        lay.addWidget(cab)
 
         self._stack_host = QWidget()
         stack_lay = QVBoxLayout(self._stack_host)
@@ -260,16 +292,24 @@ class Viewer2D(QWidget):
             w.hide()
             w.setStyleSheet(f"background: {COLOR_BG};")
             stack_lay.addWidget(w)
+        self._stack_host.setObjectName("pilaCortes")
+        self._stack_host.setStyleSheet(f"#pilaCortes {{ background: {COLOR_BG}; }}")
         lay.addWidget(self._stack_host, 1)
 
         self._vacio = QLabel(
-            "Sin volumen para mostrar.\n\nCargue un estudio y ejecute el "
-            "pipeline, o abra un caso con volumen NIfTI para delinear el "
-            "tumor manualmente.")
+            "Sin imagen para mostrar.\n\nElija un caso ATLAS o abra un volumen "
+            "NIfTI para revisar los cortes y delinear la lesión.")
         self._vacio.setAlignment(Qt.AlignCenter)
         self._vacio.setWordWrap(True)
-        self._vacio.setStyleSheet(f"color: {COLOR_TEXTO_SEC}; font-size: 13px;")
+        self._vacio.setStyleSheet(f"color: {COLOR_TEXTO_TENUE}; font-size: 13px;"
+                                  f" background: {COLOR_BG};")
         lay.addWidget(self._vacio, 1)
+        nav = QWidget()
+        nav.setObjectName("barraNavegacion")
+        nav.setStyleSheet(f"#barraNavegacion {{ background: {COLOR_PANEL}; }}")
+        nav.setLayout(self._barra_navegacion())
+        lay.addWidget(nav)
+        lay.addWidget(self._barra_herramientas())
 
         self.set_eje("axial")
 
@@ -277,27 +317,44 @@ class Viewer2D(QWidget):
     def _barra_ejes(self):
         """Selector de plano + informacion de la ventana activa."""
         barra = QHBoxLayout()
-        barra.setSpacing(6)
+        barra.setContentsMargins(12, 6, 12, 6)
+        barra.setSpacing(8)
         self._grupo = QButtonGroup(self)
         self._grupo.setExclusive(True)
+        seg = QFrame()
+        seg.setObjectName("grupoSegmentado")
+        sl = QHBoxLayout(seg)
+        sl.setContentsMargins(3, 3, 3, 3)
+        sl.setSpacing(2)
         for i, (eje, titulo) in enumerate(self.EJES):
             b = QPushButton(titulo)
+            b.setObjectName("segmento")
             b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
             b.setChecked(eje == "axial")
             b.clicked.connect(lambda _c, e=eje: self.set_eje(e))
             self._grupo.addButton(b, i)
-            barra.addWidget(b)
+            sl.addWidget(b)
+        barra.addWidget(seg)
 
-        barra.addSpacing(12)
+        barra.addSpacing(6)
         self._btn_fit = QPushButton("Ajustar")
+        self._btn_fit.setObjectName("fantasma")
         self._btn_fit.setToolTip("Escala el corte para que quepa en la ventana")
         self._btn_fit.clicked.connect(self.ajustar)
         barra.addWidget(self._btn_fit)
 
-        self._btn_overlay = QPushButton("Máscara")
+        self._btn_ir = QPushButton("Ir a la lesión")
+        self._btn_ir.setObjectName("fantasma")
+        self._btn_ir.setToolTip("Saltar al corte con más lesión  ·  T")
+        self._btn_ir.clicked.connect(self.ir_al_tumor)
+        barra.addWidget(self._btn_ir)
+        barra.addSpacing(6)
+
+        self._btn_overlay = QPushButton("Lesión")
         self._btn_overlay.setCheckable(True)
         self._btn_overlay.setChecked(True)
-        self._btn_overlay.setToolTip("Mostrar u ocultar el relleno del tumor")
+        self._btn_overlay.setToolTip("Mostrar u ocultar la lesión")
         # La conexion va AQUI, una sola vez. Estaba dentro de `set_volumen`,
         # que se llama en cada carga de estudio: cada vez se añadia una copia
         # mas y, tras cinco cambios de caso, un solo clic en "Máscara"
@@ -306,9 +363,17 @@ class Viewer2D(QWidget):
         barra.addWidget(self._btn_overlay)
         self._overlay_visible = True
 
+        self._btn_anatomia = QPushButton("Anatomía")
+        self._btn_anatomia.setCheckable(True)
+        self._btn_anatomia.setChecked(True)
+        self._btn_anatomia.setToolTip(
+            "Contornos de FreeSurfer SynthSeg con los colores de las capas 3D")
+        self._btn_anatomia.toggled.connect(self._cambio_anatomia)
+        barra.addWidget(self._btn_anatomia)
+
         barra.addStretch(1)
         self._lbl_info = QLabel("")
-        self._lbl_info.setStyleSheet(f"color: {COLOR_TEXTO_SEC}; font-size: 11px;")
+        self._lbl_info.setStyleSheet(f"color: {COLOR_WARN_2D}; font-size: 11px;")
         barra.addWidget(self._lbl_info)
         return barra
 
@@ -342,7 +407,20 @@ class Viewer2D(QWidget):
 
     def _cambio_overlay(self, visible):
         self._overlay_visible = bool(visible)
-        self._refrescar()
+        self._refrescar(ajustar=False)
+
+    def _cambio_anatomia(self, visible):
+        self._anatomia_visible = bool(visible)
+        self._refrescar(ajustar=False)
+
+    def set_titulo(self, titulo):
+        """Texto de la esquina superior izquierda del lienzo (caso/serie)."""
+        self._titulo = titulo or ""
+        for w in self._paginators.values():
+            w.update()
+
+    def titulo(self):
+        return self._titulo
 
     def set_cortes(self, cortes):
         """Modo visor-de-PNG: {eje: ruta}. Las rutas inexistentes se descartan.
@@ -524,11 +602,16 @@ class Viewer2D(QWidget):
             return
         self._slider_timer.stop()
         self._slider_pendiente = None
+        cambia_plano = eje != self._eje_actual
         self._eje_actual = eje
         for i, (e, _t) in enumerate(self.EJES):
             if e == eje and self._grupo.button(i) is not None:
                 self._grupo.button(i).setChecked(True)
         if self._volumen is not None and not self._volumen.vacio:
+            if cambia_plano:
+                # El índice de un plano no significa nada en otro: se abre el
+                # nuevo plano por el corte con más lesión (o el central).
+                self._indice = self._volumen.indice_mas_tumor(eje)
             self._indice = self._acotar(self._indice,
                                         self._volumen.n_cortes(eje))
         self._refrescar()
@@ -630,7 +713,8 @@ class Viewer2D(QWidget):
         """Renderiza el corte actual con overlay y devuelve un QPixmap."""
         rgb, _info = self._volumen.render_corte(
             self._eje_actual, self._indice, alto=self._ALTO_RENDER,
-            overlay=self._overlay_visible)
+            overlay=self._overlay_visible,
+            anatomia=self._anatomia_visible)
         h, w = rgb.shape[:2]
         # QImage no copia: hay que envolver el buffer para que siga vivo.
         img = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
@@ -693,6 +777,9 @@ class Viewer2D(QWidget):
         self._btn_prev.setEnabled(hay)
         self._btn_next.setEnabled(hay)
         self._btn_overlay.setEnabled(hay)
+        self._btn_ir.setEnabled(hay and self._volumen.vóxeles_tumor() > 0)
+        self._btn_anatomia.setEnabled(
+            hay and getattr(self._volumen, "etiquetas", None) is not None)
         self._bloqueando_slider = False
 
         if not hay:
@@ -712,11 +799,10 @@ class Viewer2D(QWidget):
         v = self._volumen
         vox = v.vóxeles_tumor()
         self._lbl_corte.setText(
-            f"Corte {self._indice + 1}/{total}   ·   "
-            f"{vox:,} vox   ·   {v.volumen_cm3_tumor():.1f} cm³")
+            f"Corte {self._indice + 1} / {total}   ·   lesión {v.volumen_cm3_tumor():.2f} cm³"
+            f"  ({vox:,} vóx)")
         self._lbl_info.setText(
-            f"ventana {v.ventana()[0]:.0f}–{v.ventana()[1]:.0f}   ·   "
-            f"{'máscara sin guardar' if v.mascara_modificada else 'máscara guardada'}")
+            "Cambios sin guardar" if v.mascara_modificada else "")
         if emitir:
             self.informacion.emit(self._lbl_corte.text())
 
@@ -908,7 +994,7 @@ class Viewer2D(QWidget):
         if w is None or w.pixmap().isNull():
             return None
         destino = os.path.join(os.path.expanduser("~"),
-                               f"neurohub_{self._eje_actual}_"
+                               f"atlas_{self._eje_actual}_"
                                f"{self._indice + 1:04d}.png")
         if parent is not None:
             destino, _ = QFileDialog.getSaveFileName(
@@ -947,8 +1033,8 @@ class _Lienzo(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("background: transparent;")
         self.setToolTip(
-            "Rueda: zoom  ·  Ctrl+rueda: corte  ·  B: pincel  ·  E: borrar"
-            "  ·  T: ir al tumor  ·  Ctrl+Z: deshacer")
+            "Rueda: corte  ·  Ctrl+rueda: zoom  ·  B: pincel  ·  E: borrar"
+            "  ·  T: ir a la lesión  ·  Ctrl+Z: deshacer")
 
     # ------------------------------------------------------------------
     def set_volumen(self, volumen, eje):
@@ -1037,6 +1123,7 @@ class _Lienzo(QWidget):
                 w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self._pixmap_escalado_clave = clave
         p.drawPixmap(x, y, self._pixmap_escalado)
+        self._pintar_anotaciones(p, x, y, w, h)
 
         herramienta = self._visor.herramienta()
         if herramienta in ("pintar", "borrar"):
@@ -1055,6 +1142,55 @@ class _Lienzo(QWidget):
             p.setBrush(Qt.NoBrush)
             p.drawEllipse(QPointF(pos), rx, ry)
         p.end()
+
+    def _pintar_anotaciones(self, p, x, y, w, h):
+        """Letras de orientación en los bordes y datos del corte en las esquinas.
+
+        Es la lectura mínima de cualquier visor radiológico: sin las letras no
+        se sabe qué lado es la derecha del paciente.
+        """
+        from PySide6.QtGui import QFont
+        if self._visor.volumen() is None:
+            return
+        p.save()
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.TextAntialiasing, True)
+        # Las letras se anclan a la imagen, pero sin salirse del lienzo
+        # cuando se hace zoom.
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + w, self.width()), min(y + h, self.height())
+        arriba, abajo, izq, der = LETRAS_PLANO.get(self._eje, ("", "", "", ""))
+        f = QFont("Segoe UI")
+        f.setPixelSize(13)
+        f.setBold(True)
+        p.setFont(f)
+        p.setPen(QColor(COLOR_ACENTO))
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        p.drawText(QRectF(cx - 30, y0 + 6, 60, 18), Qt.AlignCenter, arriba)
+        p.drawText(QRectF(cx - 30, y1 - 24, 60, 18), Qt.AlignCenter, abajo)
+        p.drawText(QRectF(x0 + 8, cy - 9, 40, 18), Qt.AlignLeft | Qt.AlignVCenter, izq)
+        p.drawText(QRectF(x1 - 48, cy - 9, 40, 18), Qt.AlignRight | Qt.AlignVCenter, der)
+
+        f.setPixelSize(11)
+        f.setBold(False)
+        p.setFont(f)
+        p.setPen(QColor(230, 237, 243, 210))
+        margen = 10
+        titulo = self._visor.titulo()
+        if titulo:
+            p.drawText(QRectF(margen, margen, self.width() - 2 * margen, 18),
+                       Qt.AlignLeft | Qt.AlignTop, titulo)
+        total = self._visor.n_cortes()
+        plano = dict(self._visor.EJES).get(self._eje, self._eje)
+        p.drawText(QRectF(margen, self.height() - 26, 300, 18),
+                   Qt.AlignLeft | Qt.AlignVCenter,
+                   f"{plano}   {self._visor.indice() + 1} / {total}")
+        vol = self._visor.volumen()
+        lo, hi = vol.ventana()
+        p.drawText(QRectF(self.width() - 310, self.height() - 26, 300, 18),
+                   Qt.AlignRight | Qt.AlignVCenter,
+                   f"V {hi - lo:.0f}  ·  N {(hi + lo) / 2:.0f}   ·   zoom {self._escala * 100:.0f} %")
+        p.restore()
 
     def _radios_pixeles(self):
         """(rx, ry) del pincel en pixeles de pantalla, ya con el zoom aplicado.

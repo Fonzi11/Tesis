@@ -1,0 +1,25 @@
+{
+    "name": "NeuroHub.Tests",
+    "rootNamespace": "",
+    "references": [
+        "NeuroHub.Runtime",
+        "Unity.XR.Management",
+        "Unity.XR.OpenXR",
+        "Unity.XR.Hands",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

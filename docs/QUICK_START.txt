@@ -1,4 +1,4 @@
-⚡ QUICK START - NEUROHUB v1.1
+⚡ QUICK START - ATLAS v1.1
 ═══════════════════════════════════════════════════════════════════════════════
 
 ✅ IMPLEMENTACIÓN COMPLETADA - Renderizado UltraDetalle + Visualización 2D/3D

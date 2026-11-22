@@ -51,3 +51,49 @@ def test_diagnostico_no_disponible():
         mensaje = fs.diagnostico()
     assert "no está" in mensaje
 
+
+def test_ejecutar_retransmite_salida_y_conserva_log(tmp_path):
+    class ProcesoFalso:
+        stdout = iter(("etapa 1\n", "etapa 2\n"))
+        returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    log_path = tmp_path / "recon-all.log"
+    salida = []
+    with patch.object(fs, "detectar", return_value=_instalacion_nativa()), \
+            patch.object(fs.subprocess, "Popen", return_value=ProcesoFalso()):
+        fs.ejecutar(["recon-all"], log_path=str(log_path),
+                    output_callback=salida.append)
+
+    assert salida == ["etapa 1", "etapa 2"]
+    assert log_path.read_text(encoding="utf-8") == "etapa 1\netapa 2\n"
+
+
+def test_synthseg_construye_comando(tmp_path):
+    entrada = tmp_path / "entrada.nii.gz"
+    entrada.write_bytes(b"nifti")
+    salida = tmp_path / "salida.nii.gz"
+
+    with patch.object(fs, "detectar", return_value=_instalacion_nativa()), \
+            patch.object(fs, "ejecutar") as ejecutar:
+        fs.synthseg(str(entrada), str(salida), robust=True,
+                    parcellation=True, threads=2, cpu=True)
+
+    args = ejecutar.call_args.args[0]
+    assert args[:5] == ["mri_synthseg", "--i", str(entrada),
+                        "--o", str(salida)]
+    assert "--robust" in args
+    assert "--parc" in args
+    assert ["--threads", "2"] == args[args.index("--threads"):
+                                    args.index("--threads") + 2]
+    assert "--cpu" in args
+
+
+def test_tumorsynth_rechaza_modo_desconocido(tmp_path):
+    entrada = tmp_path / "entrada.nii.gz"
+    entrada.write_bytes(b"nifti")
+    with pytest.raises(ValueError):
+        fs.tumorsynth(str(entrada), str(tmp_path / "salida.nii.gz"),
+                      mode="otro")

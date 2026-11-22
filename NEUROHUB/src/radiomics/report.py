@@ -3,7 +3,7 @@ Tabla de radiomics y su exportación (CSV / JSON), al estilo de Raidionics.
 
 Raidionics produce un CSV con una fila por ROI y una columna por descriptor, y
 un JSON con los metadatos del estudio. Aquí se reproduce exactamente esa
-estructura, de modo que el informe de NEUROHUB sea intercambiable con el de la
+estructura, de modo que el informe de ATLAS sea intercambiable con el de la
 aplicación original:
 
     radiomics_<estudio>.csv    una fila por ROI, una columna por descriptor

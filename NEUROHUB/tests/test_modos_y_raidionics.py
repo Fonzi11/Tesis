@@ -1,5 +1,5 @@
 """
-NEUROHUB - Pruebas de humo de las tres correcciones principales
+ATLAS - Pruebas de humo de las tres correcciones principales
 ================================================================
 
 Cubre, sin necesitar Docker ni red salvo donde se indica:

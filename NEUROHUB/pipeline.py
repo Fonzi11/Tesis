@@ -1,5 +1,5 @@
 """
-NEUROHUB - Pipeline completo en Python
+ATLAS - Pipeline completo en Python
 =====================================
 Ejecuta de principio a fin la reconstrucción 3D del caso clínico:
 
@@ -215,7 +215,7 @@ def generar_preview(mallas=None, salida=None):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Pipeline 3D completo de NEUROHUB")
+    ap = argparse.ArgumentParser(description="Pipeline 3D completo de ATLAS")
     ap.add_argument("--sin-visor", action="store_true",
                     help="genera las mallas y no abre el visor")
     ap.add_argument("--captura", action="store_true",
@@ -223,7 +223,7 @@ def main():
     args = ap.parse_args()
 
     print("=" * 66)
-    print("NEUROHUB - Pipeline de reconstrucción 3D (Python puro)")
+    print("ATLAS - Pipeline de reconstrucción 3D (Python puro)")
     print("=" * 66)
     inicio = time.time()
     mallas = reconstruir_todas()

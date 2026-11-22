@@ -1,5 +1,5 @@
 """
-NEUROHUB - Modelo ÚNICO combinado (1 solo archivo FBX) vía API de Blender
+ATLAS - Modelo ÚNICO combinado (1 solo archivo FBX) vía API de Blender
 =========================================================================
 Une las 6 mallas STL (cerebro, cráneo, tumor, arterias, venas, vasos) en
 UN SOLO objeto y exporta UN SOLO archivo FBX con los colores de cada
@@ -112,7 +112,7 @@ def main():
     bpy.context.view_layer.objects.active = objs[0]
     bpy.ops.object.join()
     joined = bpy.context.active_object
-    joined.name = "NEUROHUB"
+    joined.name = "ATLAS"
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     print(f"[MODELO] Objeto único: '{joined.name}' con "
           f"{len(joined.data.polygons):,} caras y "

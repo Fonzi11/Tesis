@@ -7,6 +7,7 @@ import importlib
 import textwrap
 import tempfile
 import zipfile
+import re
 import numpy as np
 import trimesh
 from skimage import measure
@@ -113,32 +114,34 @@ def _find_first_dicom_series(dicom_root):
     veces una serie de solo dos imágenes y provocaba errores de dimensiones al
     construir el volumen.
     """
-    reader = sitk.ImageSeriesReader()
-    candidatas = []
-
-    # Primero intentamos directamente en la ruta raíz.
-    series_ids = reader.GetGDCMSeriesIDs(dicom_root)
-    for series_id in series_ids or []:
-        file_names = reader.GetGDCMSeriesFileNames(dicom_root, series_id)
-        if file_names:
-            candidatas.append((len(file_names), dicom_root, series_id,
-                               file_names))
-
-    # Si no hay serie en raíz, buscamos en subcarpetas.
-    for current_dir, _, _ in os.walk(dicom_root):
-        series_ids = reader.GetGDCMSeriesIDs(current_dir)
-        for series_id in series_ids or []:
-            file_names = reader.GetGDCMSeriesFileNames(
-                current_dir, series_id)
-            if file_names:
-                candidatas.append((len(file_names), current_dir, series_id,
-                                   file_names))
+    candidatas = _find_dicom_series(dicom_root)
 
     if not candidatas:
         return None, None, []
     _, series_dir, series_id, file_names = max(
         candidatas, key=lambda item: item[0])
     return series_dir, series_id, file_names
+
+
+def _find_dicom_series(dicom_root):
+    """Devuelve todas las series DICOM detectadas, sin duplicarlas."""
+    reader = sitk.ImageSeriesReader()
+    candidatas = []
+    vistas = set()
+
+    for current_dir, _, _ in os.walk(dicom_root):
+        series_ids = reader.GetGDCMSeriesIDs(current_dir)
+        for series_id in series_ids or []:
+            clave = (os.path.normcase(os.path.abspath(current_dir)), series_id)
+            if clave in vistas:
+                continue
+            vistas.add(clave)
+            file_names = reader.GetGDCMSeriesFileNames(
+                current_dir, series_id)
+            if file_names:
+                candidatas.append((len(file_names), current_dir, series_id,
+                                   file_names))
+    return candidatas
 
 
 def _extraer_zips_dicom(dicom_root):
@@ -245,6 +248,43 @@ def dicom_to_nifti(dicom_dir, output_file="volumen_paciente.nii.gz"):
         sitk.WriteImage(image, output_file)
         print(f"[+] Volumen NIfTI guardado en: {output_file}")
         return output_file
+    finally:
+        if carpeta_temporal:
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
+
+
+def dicom_series_to_nifti(dicom_dir, output_dir):
+    """Convierte todas las series DICOM de una carpeta a NIfTI."""
+    carpeta_temporal = None
+    try:
+        series = _find_dicom_series(dicom_dir)
+        if not series:
+            carpeta_temporal, total_extraidos = _extraer_zips_dicom(dicom_dir)
+            if carpeta_temporal:
+                print(
+                    f"ZIP DICOM detectado: {total_extraidos} archivos "
+                    "extraídos temporalmente")
+                series = _find_dicom_series(carpeta_temporal)
+        if not series:
+            raise RuntimeError(
+                "No se encontró ninguna serie DICOM válida en la carpeta.")
+
+        os.makedirs(output_dir, exist_ok=True)
+        resultados = []
+        for indice, (_, series_dir, series_id, dicom_names) in enumerate(
+                sorted(series, key=lambda item: (
+                    os.path.normcase(item[1]), str(item[2]))), 1):
+            nombre_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(series_id))
+            salida = os.path.join(
+                output_dir, f"serie_{indice:02d}_{nombre_id}.nii.gz")
+            reader = sitk.ImageSeriesReader()
+            reader.SetFileNames(dicom_names)
+            sitk.WriteImage(reader.Execute(), salida)
+            resultados.append(salida)
+            print(
+                f"[{indice}/{len(series)}] Serie {series_id}: "
+                f"{len(dicom_names)} DICOM -> {salida}")
+        return resultados
     finally:
         if carpeta_temporal:
             shutil.rmtree(carpeta_temporal, ignore_errors=True)

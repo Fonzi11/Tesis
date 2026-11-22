@@ -1,5 +1,5 @@
 """
-NEUROHUB - Reconstrucción de superficies 3D en Python
+ATLAS - Reconstrucción de superficies 3D en Python
 =======================================================
 Genera mallas de calidad uniforme para todas las estructuras anatómicas.
 

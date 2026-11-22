@@ -1,7 +1,7 @@
 ✅ IMPLEMENTACIÓN COMPLETADA
 ═════════════════════════════════════════════════════════════════════════════
 
-PROYECTO: NEUROHUB v1.1 - Renderizado UltraDetalle + Visualización Integrada 2D/3D
+PROYECTO: ATLAS v1.1 - Renderizado UltraDetalle + Visualización Integrada 2D/3D
 ESTADO: ✅ COMPLETADO Y VALIDADO
 
 ═════════════════════════════════════════════════════════════════════════════
@@ -113,7 +113,7 @@ ESTADO: ✅ COMPLETADO Y VALIDADO
 🚀 CÓMO USAR (INMEDIATAMENTE)
 ═════════════════════════════════════════════════════════════════════════════
 
-1. Abre NEUROHUB:
+1. Abre ATLAS:
    $ cd d:\Tesis\NEUROHUB
    $ python main.py
 
